@@ -7,8 +7,6 @@ Real-time server and WordPress health monitoring for any host. Automatically det
 environment and pulls metrics from the best available source: the native operating system,
 cPanel, the WP Engine Hosting Platform API, or WordPress itself.
 
-> Repository: <https://github.com/wolfslender/server-pulse>
-
 ## Why this plugin exists
 
 Most "server monitor" plugins assume they can read CPU and RAM from PHP. On managed hosts
