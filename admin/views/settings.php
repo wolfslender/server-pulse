@@ -157,6 +157,134 @@ $statuses = isset( $statuses ) ? $statuses : array();
 			<span class="sp-test-result" id="sp-test-cpanel"></span>
 		</div>
 
+		<?php
+		$sp_alerts = $settings['alerts'];
+		$sp_pro    = Server_Pulse_License::is_pro();
+		?>
+		<div class="sp-card">
+			<h2><?php esc_html_e( 'Alerts & notifications', 'server-pulse' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Server Pulse watches the thresholds above plus site availability, and notifies you when something crosses a limit. Alerts are de-duplicated so you are not flooded.', 'server-pulse' ); ?></p>
+
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Alert engine', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[alerts][enabled]" value="1" <?php checked( $sp_alerts['enabled'], 1 ); ?> /> <?php esc_html_e( 'Enable alert evaluation', 'server-pulse' ); ?></label></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Site availability', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[alerts][uptime_enabled]" value="1" <?php checked( $sp_alerts['uptime_enabled'], 1 ); ?> /> <?php esc_html_e( 'Check the homepage every 5 minutes and alert if it goes down', 'server-pulse' ); ?></label></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Notify on recovery', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[alerts][notify_recovery]" value="1" <?php checked( $sp_alerts['notify_recovery'], 1 ); ?> /> <?php esc_html_e( 'Send a message when an alert returns to normal', 'server-pulse' ); ?></label></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="sp-cooldown"><?php esc_html_e( 'Reminder cooldown (hours)', 'server-pulse' ); ?></label></th>
+					<td><input type="number" min="1" max="168" id="sp-cooldown" name="server_pulse_settings[alerts][cooldown_hours]" value="<?php echo esc_attr( $sp_alerts['cooldown_hours'] ); ?>" class="small-text" />
+					<p class="description"><?php esc_html_e( 'How often to re-send a notification while an alert is still active.', 'server-pulse' ); ?></p></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="sp-cap"><?php esc_html_e( 'Daily notification cap', 'server-pulse' ); ?></label></th>
+					<td><input type="number" min="0" max="100" id="sp-cap" name="server_pulse_settings[alerts][daily_cap]" value="<?php echo esc_attr( $sp_alerts['daily_cap'] ); ?>" class="small-text" />
+					<p class="description"><?php esc_html_e( 'Maximum non-critical notifications per day. Set 0 for no limit. Critical alerts always go through.', 'server-pulse' ); ?></p></td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'Rules', 'server-pulse' ); ?></h3>
+			<table class="form-table" role="presentation">
+				<?php
+				$sp_rules = array(
+					'cpu'          => __( 'CPU usage', 'server-pulse' ),
+					'memory'       => __( 'Memory usage', 'server-pulse' ),
+					'disk'         => __( 'Disk usage', 'server-pulse' ),
+					'php_memory'   => __( 'PHP memory usage', 'server-pulse' ),
+					'autoload'     => __( 'Autoloaded options', 'server-pulse' ),
+					'cron'         => __( 'Overdue cron events', 'server-pulse' ),
+					'object_cache' => __( 'Object cache recommendation', 'server-pulse' ),
+					'cpu_trend'    => __( 'CPU trend (vs 7-day average)', 'server-pulse' ),
+					'memory_trend' => __( 'Memory trend (vs 7-day average)', 'server-pulse' ),
+					'disk_trend'   => __( 'Disk trend (vs 7-day average)', 'server-pulse' ),
+					'php_memory_trend' => __( 'PHP memory trend (vs 7-day average)', 'server-pulse' ),
+					'disk_projection'  => __( 'Disk capacity projection', 'server-pulse' ),
+					'bandwidth_projection' => __( 'Bandwidth projection', 'server-pulse' ),
+				);
+				foreach ( $sp_rules as $sp_rule => $sp_rule_label ) :
+					?>
+					<tr>
+						<th scope="row"><?php echo esc_html( $sp_rule_label ); ?></th>
+						<td><label><input type="checkbox" name="server_pulse_settings[alerts][rules][<?php echo esc_attr( $sp_rule ); ?>]" value="1" <?php checked( ! empty( $sp_alerts['rules'][ $sp_rule ] ), true ); ?> /> <?php esc_html_e( 'Notify', 'server-pulse' ); ?></label></td>
+					</tr>
+				<?php endforeach; ?>
+			</table>
+
+			<h3><?php esc_html_e( 'Trend thresholds', 'server-pulse' ); ?></h3>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="sp-trend-deviation"><?php esc_html_e( 'Deviation sensitivity (points)', 'server-pulse' ); ?></label></th>
+					<td><input type="number" min="5" max="60" id="sp-trend-deviation" name="server_pulse_settings[alerts][trend_deviation]" value="<?php echo esc_attr( $sp_alerts['trend_deviation'] ); ?>" class="small-text" />
+					<p class="description"><?php esc_html_e( 'How many percentage points above its 7-day average a metric must be before a trend alert fires.', 'server-pulse' ); ?></p></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="sp-disk-days"><?php esc_html_e( 'Disk projection horizon (days)', 'server-pulse' ); ?></label></th>
+					<td><input type="number" min="7" max="90" id="sp-disk-days" name="server_pulse_settings[alerts][disk_days_threshold]" value="<?php echo esc_attr( $sp_alerts['disk_days_threshold'] ); ?>" class="small-text" />
+					<p class="description"><?php esc_html_e( 'Alert when disk is projected to reach capacity within this many days.', 'server-pulse' ); ?></p></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="sp-bandwidth-pct"><?php esc_html_e( 'Bandwidth limit projection (%)', 'server-pulse' ); ?></label></th>
+					<td><input type="number" min="60" max="100" id="sp-bandwidth-pct" name="server_pulse_settings[alerts][bandwidth_pct_threshold]" value="<?php echo esc_attr( $sp_alerts['bandwidth_pct_threshold'] ); ?>" class="small-text" />
+					<p class="description"><?php esc_html_e( 'Alert when the current rate puts the site above this percent of the monthly bandwidth limit.', 'server-pulse' ); ?></p></td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'Email', 'server-pulse' ); ?> <span class="sp-badge"><?php esc_html_e( 'Free', 'server-pulse' ); ?></span></h3>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Email alerts', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[alerts][email_enabled]" value="1" <?php checked( $sp_alerts['email_enabled'], 1 ); ?> /> <?php esc_html_e( 'Send alerts by email', 'server-pulse' ); ?></label></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="sp-recipients"><?php esc_html_e( 'Recipients', 'server-pulse' ); ?></label></th>
+					<td><input type="text" id="sp-recipients" name="server_pulse_settings[alerts][email_recipients]" value="<?php echo esc_attr( $sp_alerts['email_recipients'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>" />
+					<p class="description"><?php esc_html_e( 'Comma separated. Leave empty to use the site admin email.', 'server-pulse' ); ?></p></td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'Pro channels', 'server-pulse' ); ?> <span class="sp-badge <?php echo $sp_pro ? 'is-on' : ''; ?>"><?php echo esc_html( $sp_pro ? __( 'Unlocked', 'server-pulse' ) : __( 'Pro', 'server-pulse' ) ); ?></span></h3>
+			<?php if ( ! $sp_pro ) : ?>
+				<p class="description"><?php esc_html_e( 'Webhook, Slack, Discord and Telegram delivery are Pro features. The fields below are kept in place and activate automatically once Pro is unlocked.', 'server-pulse' ); ?></p>
+			<?php endif; ?>
+			<fieldset <?php echo $sp_pro ? '' : 'disabled'; ?>>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><label for="sp-webhook"><?php esc_html_e( 'Generic webhook URL', 'server-pulse' ); ?></label></th>
+						<td><input type="password" id="sp-webhook" name="server_pulse_settings[alerts][webhook_url]" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $sp_alerts['webhook_url'] ? esc_attr__( '•••••••• (saved)', 'server-pulse' ) : 'https://'; ?>" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="sp-slack"><?php esc_html_e( 'Slack webhook URL', 'server-pulse' ); ?></label></th>
+						<td><input type="password" id="sp-slack" name="server_pulse_settings[alerts][slack_webhook]" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $sp_alerts['slack_webhook'] ? esc_attr__( '•••••••• (saved)', 'server-pulse' ) : 'https://hooks.slack.com/…'; ?>" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="sp-discord"><?php esc_html_e( 'Discord webhook URL', 'server-pulse' ); ?></label></th>
+						<td><input type="password" id="sp-discord" name="server_pulse_settings[alerts][discord_webhook]" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $sp_alerts['discord_webhook'] ? esc_attr__( '•••••••• (saved)', 'server-pulse' ) : 'https://discord.com/api/webhooks/…'; ?>" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="sp-telegram-token"><?php esc_html_e( 'Telegram bot token', 'server-pulse' ); ?></label></th>
+						<td><input type="password" id="sp-telegram-token" name="server_pulse_settings[alerts][telegram_token]" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $sp_alerts['telegram_token'] ? esc_attr__( '•••••••• (saved)', 'server-pulse' ) : ''; ?>" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="sp-telegram-chat"><?php esc_html_e( 'Telegram chat ID', 'server-pulse' ); ?></label></th>
+						<td><input type="text" id="sp-telegram-chat" name="server_pulse_settings[alerts][telegram_chat]" value="<?php echo esc_attr( $sp_alerts['telegram_chat'] ); ?>" class="regular-text" autocomplete="off" /></td>
+					</tr>
+				</table>
+			</fieldset>
+
+			<p>
+				<button type="button" class="button sp-test-alert"><?php esc_html_e( 'Send test alert', 'server-pulse' ); ?></button>
+				<span class="sp-test-result" id="sp-test-alert-result"></span>
+			</p>
+			<p class="description"><?php esc_html_e( 'Save your changes before sending a test.', 'server-pulse' ); ?></p>
+		</div>
+
 		<?php submit_button(); ?>
 	</form>
 </div>

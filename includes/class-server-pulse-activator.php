@@ -26,19 +26,35 @@ class Server_Pulse_Activator {
 	}
 
 	/**
+	 * Run schema upgrades on an existing install.
+	 *
+	 * @return void
+	 */
+	public static function upgrade() {
+		self::create_tables();
+
+		if ( ! wp_next_scheduled( 'server_pulse_alert_event' ) ) {
+			wp_schedule_event( time() + 300, 'server_pulse_five_minutes', 'server_pulse_alert_event' );
+		}
+
+		update_option( 'server_pulse_db_version', SERVER_PULSE_DB_VERSION );
+	}
+
+	/**
 	 * Create custom tables.
 	 *
 	 * @return void
 	 */
-	private static function create_tables() {
+	public static function create_tables() {
 		global $wpdb;
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
 		$charset_collate = $wpdb->get_charset_collate();
 		$samples         = $wpdb->prefix . 'sp_samples';
+		$alerts          = $wpdb->prefix . 'sp_alerts';
 
-		$sql = "CREATE TABLE {$samples} (
+		$samples_sql = "CREATE TABLE {$samples} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			captured_at datetime NOT NULL,
 			source varchar(40) NOT NULL DEFAULT '',
@@ -51,7 +67,29 @@ class Server_Pulse_Activator {
 			KEY source (source)
 		) {$charset_collate};";
 
-		dbDelta( $sql );
+		$alerts_sql = "CREATE TABLE {$alerts} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			resolved_at datetime NULL DEFAULT NULL,
+			last_notified datetime NULL DEFAULT NULL,
+			rule_key varchar(60) NOT NULL DEFAULT '',
+			metric varchar(60) NOT NULL DEFAULT '',
+			severity varchar(20) NOT NULL DEFAULT 'warning',
+			value decimal(20,4) NOT NULL DEFAULT 0,
+			threshold decimal(20,4) NOT NULL DEFAULT 0,
+			status varchar(20) NOT NULL DEFAULT 'active',
+			notify_count int(11) unsigned NOT NULL DEFAULT 0,
+			message text NULL,
+			context longtext NULL,
+			PRIMARY KEY  (id),
+			KEY rule_status (rule_key, status),
+			KEY created_at (created_at),
+			KEY status (status)
+		) {$charset_collate};";
+
+		dbDelta( $samples_sql );
+		dbDelta( $alerts_sql );
 	}
 
 	/**
@@ -81,6 +119,10 @@ class Server_Pulse_Activator {
 
 		if ( ! wp_next_scheduled( 'server_pulse_cleanup_event' ) ) {
 			wp_schedule_event( time() + 300, 'daily', 'server_pulse_cleanup_event' );
+		}
+
+		if ( ! wp_next_scheduled( 'server_pulse_alert_event' ) ) {
+			wp_schedule_event( time() + 300, 'server_pulse_five_minutes', 'server_pulse_alert_event' );
 		}
 
 		if ( ! wp_next_scheduled( Server_Pulse_Storage_Scanner::EVENT ) ) {

@@ -17,11 +17,14 @@ delete_option( 'server_pulse_db_version' );
 delete_transient( 'server_pulse_snapshot' );
 delete_transient( 'server_pulse_wpengine_usage' );
 
-// Drop the samples table.
-$server_pulse_table = $wpdb->prefix . 'sp_samples';
+// Drop the custom tables.
+$server_pulse_table  = $wpdb->prefix . 'sp_samples';
+$server_pulse_alerts = $wpdb->prefix . 'sp_alerts';
 
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 $wpdb->query( "DROP TABLE IF EXISTS {$server_pulse_table}" );
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+$wpdb->query( "DROP TABLE IF EXISTS {$server_pulse_alerts}" );
 
 // Multisite cleanup.
 if ( is_multisite() ) {
@@ -35,10 +38,13 @@ if ( is_multisite() ) {
 		delete_transient( 'server_pulse_snapshot' );
 		delete_transient( 'server_pulse_wpengine_usage' );
 
-		$server_pulse_table = $wpdb->prefix . 'sp_samples';
+		$server_pulse_table  = $wpdb->prefix . 'sp_samples';
+		$server_pulse_alerts = $wpdb->prefix . 'sp_alerts';
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 		$wpdb->query( "DROP TABLE IF EXISTS {$server_pulse_table}" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$wpdb->query( "DROP TABLE IF EXISTS {$server_pulse_alerts}" );
 
 		restore_current_blog();
 	}

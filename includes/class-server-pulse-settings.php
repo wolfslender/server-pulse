@@ -55,6 +55,39 @@ class Server_Pulse_Settings {
 				'php_memory' => 80,
 				'autoload'   => 2,
 			),
+			'alerts'             => array(
+				'enabled'                => 1,
+				'email_enabled'          => 1,
+				'email_recipients'       => '',
+				'cooldown_hours'         => 6,
+				'daily_cap'              => 5,
+				'notify_recovery'        => 1,
+				'uptime_enabled'         => 1,
+				'trend_deviation'        => 15,
+				'disk_days_threshold'    => 7,
+				'bandwidth_pct_threshold' => 85,
+				'rules'                  => array(
+					'cpu'                 => 1,
+					'memory'              => 1,
+					'disk'                => 1,
+					'php_memory'          => 1,
+					'autoload'            => 1,
+					'cron'                => 1,
+					'object_cache'        => 0,
+					'site_down'           => 1,
+					'cpu_trend'           => 1,
+					'memory_trend'        => 1,
+					'disk_trend'          => 1,
+					'php_memory_trend'    => 1,
+					'disk_projection'     => 1,
+					'bandwidth_projection' => 1,
+				),
+				'webhook_url'            => '',
+				'slack_webhook'          => '',
+				'discord_webhook'        => '',
+				'telegram_token'         => '',
+				'telegram_chat'          => '',
+			),
 		);
 	}
 
@@ -74,6 +107,18 @@ class Server_Pulse_Settings {
 				self::$cache['thresholds'] = self::defaults()['thresholds'];
 			} else {
 				self::$cache['thresholds'] = wp_parse_args( self::$cache['thresholds'], self::defaults()['thresholds'] );
+			}
+
+			if ( ! is_array( self::$cache['alerts'] ) ) {
+				self::$cache['alerts'] = self::defaults()['alerts'];
+			} else {
+				self::$cache['alerts'] = wp_parse_args( self::$cache['alerts'], self::defaults()['alerts'] );
+
+				if ( ! is_array( self::$cache['alerts']['rules'] ) ) {
+					self::$cache['alerts']['rules'] = self::defaults()['alerts']['rules'];
+				} else {
+					self::$cache['alerts']['rules'] = wp_parse_args( self::$cache['alerts']['rules'], self::defaults()['alerts']['rules'] );
+				}
 			}
 		}
 
@@ -156,6 +201,69 @@ class Server_Pulse_Settings {
 			$output['thresholds']['autoload'] = max( 0.1, min( 50, (float) $thresholds['autoload'] ) );
 		}
 
+		$output['alerts'] = self::sanitize_alerts( isset( $input['alerts'] ) ? $input['alerts'] : array(), $current['alerts'] );
+
+		return $output;
+	}
+
+	/**
+	 * Sanitize the alerts configuration.
+	 *
+	 * @param array $input   Raw alerts input.
+	 * @param array $current Current alerts config.
+	 * @return array
+	 */
+	private static function sanitize_alerts( $input, $current ) {
+		$input  = is_array( $input ) ? $input : array();
+		$output = is_array( $current ) ? $current : self::defaults()['alerts'];
+
+		foreach ( array( 'enabled', 'email_enabled', 'notify_recovery', 'uptime_enabled' ) as $flag ) {
+			$output[ $flag ] = ! empty( $input[ $flag ] ) ? 1 : 0;
+		}
+
+		$output['email_recipients'] = isset( $input['email_recipients'] )
+			? sanitize_text_field( $input['email_recipients'] )
+			: $output['email_recipients'];
+
+		$output['cooldown_hours'] = isset( $input['cooldown_hours'] ) ? max( 1, min( 168, absint( $input['cooldown_hours'] ) ) ) : $output['cooldown_hours'];
+		$output['daily_cap']      = isset( $input['daily_cap'] ) ? max( 0, min( 100, absint( $input['daily_cap'] ) ) ) : $output['daily_cap'];
+
+		$output['trend_deviation'] = isset( $input['trend_deviation'] ) ? max( 5, min( 60, absint( $input['trend_deviation'] ) ) ) : $output['trend_deviation'];
+		$output['disk_days_threshold'] = isset( $input['disk_days_threshold'] ) ? max( 7, min( 90, absint( $input['disk_days_threshold'] ) ) ) : $output['disk_days_threshold'];
+		$output['bandwidth_pct_threshold'] = isset( $input['bandwidth_pct_threshold'] ) ? max( 60, min( 100, absint( $input['bandwidth_pct_threshold'] ) ) ) : $output['bandwidth_pct_threshold'];
+
+		$rules = isset( $input['rules'] ) && is_array( $input['rules'] ) ? $input['rules'] : array();
+		foreach ( array( 'cpu', 'memory', 'disk', 'php_memory', 'autoload', 'cron', 'object_cache', 'site_down', 'cpu_trend', 'memory_trend', 'disk_trend', 'php_memory_trend', 'disk_projection', 'bandwidth_projection' ) as $rule ) {
+			$output['rules'][ $rule ] = ! empty( $rules[ $rule ] ) ? 1 : 0;
+		}
+
+		// Secret channel endpoints: encrypt only when a new value is submitted.
+		$secrets = array(
+			'webhook_url'     => 'esc_url_raw',
+			'slack_webhook'   => 'esc_url_raw',
+			'discord_webhook' => 'esc_url_raw',
+			'telegram_token'  => 'sanitize_text_field',
+		);
+
+		foreach ( $secrets as $key => $sanitizer ) {
+			if ( empty( $input[ $key ] ) ) {
+				continue;
+			}
+
+			// Already encrypted (e.g. WordPress ran this sanitizer twice).
+			if ( 0 === strpos( (string) $input[ $key ], Server_Pulse_Crypto::PREFIX ) ) {
+				$output[ $key ] = $input[ $key ];
+				continue;
+			}
+
+			$value          = call_user_func( $sanitizer, $input[ $key ] );
+			$output[ $key ] = Server_Pulse_Crypto::encrypt( $value );
+		}
+
+		$output['telegram_chat'] = isset( $input['telegram_chat'] )
+			? sanitize_text_field( $input['telegram_chat'] )
+			: $output['telegram_chat'];
+
 		return $output;
 	}
 
@@ -175,5 +283,17 @@ class Server_Pulse_Settings {
 	 */
 	public static function wpengine_api_pass() {
 		return Server_Pulse_Crypto::decrypt( self::get( 'wpengine_api_pass', '' ) );
+	}
+
+	/**
+	 * Decrypt and return an alert channel secret.
+	 *
+	 * @param string $key Alert secret key.
+	 * @return string
+	 */
+	public static function alert_secret( $key ) {
+		$alerts = self::get( 'alerts', array() );
+
+		return Server_Pulse_Crypto::decrypt( isset( $alerts[ $key ] ) ? $alerts[ $key ] : '' );
 	}
 }

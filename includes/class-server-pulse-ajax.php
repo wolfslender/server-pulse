@@ -27,17 +27,38 @@ class Server_Pulse_Ajax {
 	private $repository;
 
 	/**
+	 * Alert engine.
+	 *
+	 * @var Server_Pulse_Alerts
+	 */
+	private $alerts;
+
+	/**
+	 * Trend analysis.
+	 *
+	 * @var Server_Pulse_Trends
+	 */
+	private $trends;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Server_Pulse_Collector  $collector  Collector.
 	 * @param Server_Pulse_Repository $repository Repository.
+	 * @param Server_Pulse_Alerts     $alerts     Alert engine.
+	 * @param Server_Pulse_Trends     $trends     Trend analysis.
 	 */
-	public function __construct( Server_Pulse_Collector $collector, Server_Pulse_Repository $repository ) {
+	public function __construct( Server_Pulse_Collector $collector, Server_Pulse_Repository $repository, Server_Pulse_Alerts $alerts, Server_Pulse_Trends $trends ) {
 		$this->collector  = $collector;
 		$this->repository = $repository;
+		$this->alerts     = $alerts;
+		$this->trends     = $trends;
 
 		add_action( 'wp_ajax_server_pulse_get_snapshot', array( $this, 'get_snapshot' ) );
 		add_action( 'wp_ajax_server_pulse_get_history', array( $this, 'get_history' ) );
+		add_action( 'wp_ajax_server_pulse_get_alerts', array( $this, 'get_alerts' ) );
+		add_action( 'wp_ajax_server_pulse_get_trends', array( $this, 'get_trends' ) );
+		add_action( 'wp_ajax_server_pulse_send_test_alert', array( $this, 'send_test_alert' ) );
 		add_action( 'wp_ajax_server_pulse_test_connection', array( $this, 'test_connection' ) );
 		add_action( 'wp_ajax_server_pulse_sample_now', array( $this, 'sample_now' ) );
 		add_action( 'wp_ajax_server_pulse_scan_storage', array( $this, 'scan_storage' ) );
@@ -83,6 +104,79 @@ class Server_Pulse_Ajax {
 			array(
 				'days'   => $days,
 				'series' => $this->repository->get_dashboard_series( $days ),
+			)
+		);
+	}
+
+	/**
+	 * Return recent alert history.
+	 *
+	 * @return void
+	 */
+	public function get_alerts() {
+		$this->guard();
+
+		$limit = isset( $_POST['limit'] ) ? absint( $_POST['limit'] ) : 20;
+
+		wp_send_json_success(
+			array(
+				'active' => $this->alerts->active_count(),
+				'alerts' => $this->alerts->recent( $limit ),
+			)
+		);
+	}
+
+	/**
+	 * Return trend baselines and resource projections.
+	 *
+	 * @return void
+	 */
+	public function get_trends() {
+		$this->guard();
+
+		$snapshot = $this->collector->get_snapshot( false );
+		$summary  = isset( $snapshot['summary'] ) ? $snapshot['summary'] : array();
+
+		if ( empty( $summary ) ) {
+			wp_send_json_error( array( 'message' => __( 'No metrics available yet.', 'server-pulse' ) ) );
+		}
+
+		wp_send_json_success( $this->trends->compute( $summary ) );
+	}
+
+	/**
+	 * Send a test notification through every enabled channel.
+	 *
+	 * @return void
+	 */
+	public function send_test_alert() {
+		$this->guard();
+
+		$results = $this->alerts->send_test();
+		$sent    = array();
+		$failed  = array();
+
+		foreach ( $results as $channel => $result ) {
+			if ( is_wp_error( $result ) ) {
+				$failed[ $channel ] = $result->get_error_message();
+			} elseif ( $result ) {
+				$sent[] = $channel;
+			} else {
+				$failed[ $channel ] = __( 'The channel refused the test.', 'server-pulse' );
+			}
+		}
+
+		if ( empty( $results ) ) {
+			wp_send_json_error( array( 'message' => __( 'No alert channel is enabled and configured yet.', 'server-pulse' ) ) );
+		}
+
+		wp_send_json_success(
+			array(
+				'sent'    => $sent,
+				'failed'  => $failed,
+				'message' => empty( $failed )
+					? __( 'Test notification sent.', 'server-pulse' )
+					: __( 'Test finished with some errors.', 'server-pulse' ),
 			)
 		);
 	}

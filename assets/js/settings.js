@@ -90,10 +90,74 @@
 			});
 	}
 
+	function testAlert(button) {
+		var target = document.getElementById('sp-test-alert-result');
+		if (!target) {
+			return;
+		}
+
+		button.disabled = true;
+		target.className = 'sp-test-result';
+		target.innerHTML = config.i18n.sending;
+
+		var params = new URLSearchParams();
+		params.append('action', 'server_pulse_send_test_alert');
+		params.append('nonce', config.nonce);
+
+		fetch(config.ajaxurl, {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			body: params.toString()
+		})
+			.then(function (response) {
+				return response.json();
+			})
+			.then(function (payload) {
+				button.disabled = false;
+
+				if (!payload || !payload.success) {
+					target.className = 'sp-test-result is-error';
+					target.innerHTML = escapeHtml((payload && payload.data && payload.data.message) || config.i18n.testFailed);
+					return;
+				}
+
+				var data = payload.data || {};
+				var failed = Object.keys(data.failed || {});
+				target.className = 'sp-test-result ' + (failed.length ? 'is-error' : 'is-ok');
+
+				var html = '<p class="sp-diag-title">' + escapeHtml(config.i18n.testSent) + '</p><ul class="sp-diag">';
+				(data.sent || []).forEach(function (channel) {
+					html += '<li class="sp-diag-item is-ok"><span class="sp-diag-dot"></span><strong>' + escapeHtml(channel) + '</strong></li>';
+				});
+				failed.forEach(function (channel) {
+					html +=
+						'<li class="sp-diag-item is-error"><span class="sp-diag-dot"></span><strong>' +
+						escapeHtml(channel) +
+						'</strong><span class="sp-diag-detail">' +
+						escapeHtml(data.failed[channel]) +
+						'</span></li>';
+				});
+				html += '</ul>';
+				target.innerHTML = html;
+			})
+			.catch(function () {
+				button.disabled = false;
+				target.className = 'sp-test-result is-error';
+				target.innerHTML = escapeHtml(config.i18n.error);
+			});
+	}
+
 	document.addEventListener('DOMContentLoaded', function () {
 		Array.prototype.forEach.call(document.querySelectorAll('.sp-test'), function (button) {
 			button.addEventListener('click', function () {
 				test(button);
+			});
+		});
+
+		Array.prototype.forEach.call(document.querySelectorAll('.sp-test-alert'), function (button) {
+			button.addEventListener('click', function () {
+				testAlert(button);
 			});
 		});
 	});

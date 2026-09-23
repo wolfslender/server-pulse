@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## [3.1.0] - 2026-09-22
+
+### Added
+- Alert engine with per-rule thresholds, de-duplication, reminder cooldowns and a daily notification cap.
+- Site availability (uptime) check every 5 minutes with down/resolved notifications.
+- Email alert channel (free) with a styled HTML message and per-site subject lines.
+- Pro delivery channels: generic webhook, Slack, Discord and Telegram, gated behind `Server_Pulse_License::is_pro()`.
+- New `{prefix}sp_alerts` table storing alert history, status and notification counts.
+- Alerts screen with history, active count and a "send test alert" action.
+- Dashboard alert history table and alert configuration inside Settings.
+- **Trend analysis and projections**: per metric current vs 7-day average with deviation detection (`cpu_trend`, `memory_trend`, `disk_trend`, `php_memory_trend`).
+- **Capacity projections**: days left until disk reaches capacity, database growth rate and projected month-end bandwidth usage (`disk_projection`, `bandwidth_projection`), with a dedicated dashboard card.
+- `disk_used` time series for growth-rate math.
+- Database schema version 2 with an automatic upgrade routine for existing installs.
+
+### Changed
+- Alert channel secrets (webhook, Slack, Discord, Telegram) are encrypted at rest like the provider credentials.
+- Threshold resolution now only clears rules owned by the threshold engine, so trend/projection alerts keep their own lifecycle.
+
+### Security
+- Every new AJAX action keeps the existing capability and nonce guards; channel URLs are sanitized and stored encrypted.
+
 ## [3.0.1] - 2026-09-22
 
 ### Fixed

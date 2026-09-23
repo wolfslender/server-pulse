@@ -27,6 +27,13 @@ class Server_Pulse_Admin {
 	private $settings_hook = '';
 
 	/**
+	 * Alerts page hook.
+	 *
+	 * @var string
+	 */
+	private $alerts_hook = '';
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -60,6 +67,15 @@ class Server_Pulse_Admin {
 			'manage_options',
 			'server-pulse-settings',
 			array( $this, 'render_settings' )
+		);
+
+		$this->alerts_hook = add_submenu_page(
+			'server-pulse',
+			__( 'Server Pulse Alerts', 'server-pulse' ),
+			__( 'Alerts', 'server-pulse' ),
+			'manage_options',
+			'server-pulse-alerts',
+			array( $this, 'render_alerts' )
 		);
 	}
 
@@ -104,7 +120,7 @@ class Server_Pulse_Admin {
 	 * @return void
 	 */
 	public function enqueue( $hook ) {
-		if ( $hook !== $this->dashboard_hook && $hook !== $this->settings_hook ) {
+		if ( $hook !== $this->dashboard_hook && $hook !== $this->settings_hook && $hook !== $this->alerts_hook ) {
 			return;
 		}
 
@@ -115,7 +131,7 @@ class Server_Pulse_Admin {
 			SERVER_PULSE_VERSION
 		);
 
-		if ( $hook === $this->settings_hook ) {
+		if ( $hook === $this->settings_hook || $hook === $this->alerts_hook ) {
 			wp_enqueue_script(
 				'server-pulse-settings',
 				SERVER_PULSE_URL . 'assets/js/settings.js',
@@ -131,10 +147,13 @@ class Server_Pulse_Admin {
 					'ajaxurl' => admin_url( 'admin-ajax.php' ),
 					'nonce'   => wp_create_nonce( 'server_pulse_nonce' ),
 					'i18n'    => array(
-						'testing' => __( 'Testing…', 'server-pulse' ),
-						'ok'      => __( 'Connection successful.', 'server-pulse' ),
-						'failed'  => __( 'Connection failed.', 'server-pulse' ),
-						'error'   => __( 'Request failed.', 'server-pulse' ),
+						'testing'    => __( 'Testing…', 'server-pulse' ),
+						'ok'         => __( 'Connection successful.', 'server-pulse' ),
+						'failed'     => __( 'Connection failed.', 'server-pulse' ),
+						'error'      => __( 'Request failed.', 'server-pulse' ),
+						'sending'    => __( 'Sending…', 'server-pulse' ),
+						'testSent'   => __( 'Test notification sent.', 'server-pulse' ),
+						'testFailed' => __( 'Test finished with errors.', 'server-pulse' ),
 					),
 				)
 			);
@@ -162,6 +181,8 @@ class Server_Pulse_Admin {
 			true
 		);
 
+		$sp_alerts = Server_Pulse_Settings::get( 'alerts', array() );
+
 		wp_localize_script(
 			'server-pulse-dashboard',
 			'serverPulse',
@@ -170,15 +191,23 @@ class Server_Pulse_Admin {
 				'nonce'    => wp_create_nonce( 'server_pulse_nonce' ),
 				'refresh'  => (int) Server_Pulse_Settings::get( 'dashboard_refresh', 15 ),
 				'statuses' => ( new Server_Pulse_Provider_Manager() )->statuses(),
+				'trends'   => array(
+					'deviation' => isset( $sp_alerts['trend_deviation'] ) ? (int) $sp_alerts['trend_deviation'] : 15,
+				),
 				'i18n'     => array(
-					'loading'       => __( 'Collecting live metrics…', 'server-pulse' ),
-					'error'         => __( 'Could not fetch metrics.', 'server-pulse' ),
-					'notAvailable'  => __( 'Not available on this host', 'server-pulse' ),
-					'justNow'       => __( 'just now', 'server-pulse' ),
-					'updatedAgo'    => __( 'Updated %s ago', 'server-pulse' ),
-					'confirmed'     => __( 'Connection successful.', 'server-pulse' ),
-					'confirmPurge'  => __( 'Store a sample now?', 'server-pulse' ),
-					'scanning'      => __( 'Scanning storage… this can take a few seconds.', 'server-pulse' ),
+					'loading'          => __( 'Collecting live metrics…', 'server-pulse' ),
+					'error'            => __( 'Could not fetch metrics.', 'server-pulse' ),
+					'notAvailable'     => __( 'Not available on this host', 'server-pulse' ),
+					'justNow'          => __( 'just now', 'server-pulse' ),
+					'updatedAgo'       => __( 'Updated %s ago', 'server-pulse' ),
+					'confirmed'        => __( 'Connection successful.', 'server-pulse' ),
+					'confirmPurge'     => __( 'Store a sample now?', 'server-pulse' ),
+					'scanning'         => __( 'Scanning storage… this can take a few seconds.', 'server-pulse' ),
+					'diskDaysLeft'     => __( '~%d days of disk left at the current pace', 'server-pulse' ),
+					'diskStable'       => __( 'Disk usage is steady', 'server-pulse' ),
+					'diskGrowth'       => __( 'Disk is growing %s/day', 'server-pulse' ),
+					'dbGrowth'         => __( 'Database is growing %s/day', 'server-pulse' ),
+					'bandwidthProjected' => __( 'Bandwidth projected at ~%d%% of the monthly limit', 'server-pulse' ),
 				),
 			)
 		);
@@ -214,6 +243,23 @@ class Server_Pulse_Admin {
 	}
 
 	/**
+	 * Render the alerts view.
+	 *
+	 * @return void
+	 */
+	public function render_alerts() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'server-pulse' ) );
+		}
+
+		$alerts   = server_pulse()->alerts;
+		$settings = Server_Pulse_Settings::all();
+		$history  = $alerts->recent( 50 );
+
+		include SERVER_PULSE_DIR . 'admin/views/alerts.php';
+	}
+
+	/**
 	 * Reschedule cron when settings change.
 	 *
 	 * @return void
@@ -236,6 +282,10 @@ class Server_Pulse_Admin {
 			}
 		} else {
 			wp_clear_scheduled_hook( Server_Pulse_Storage_Scanner::EVENT );
+		}
+
+		if ( ! wp_next_scheduled( 'server_pulse_alert_event' ) ) {
+			wp_schedule_event( time() + 300, 'server_pulse_five_minutes', 'server_pulse_alert_event' );
 		}
 
 		// Force a fresh collection after settings change.

@@ -4,7 +4,7 @@ Tags: server, monitoring, health, wp engine, cpanel
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 3.0.1
+Stable tag: 3.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,6 +27,11 @@ Server Pulse gives you a single dashboard for the health of your server and your
 * Prioritized metric merge: each metric is taken from the most authoritative provider available.
 * Historical charts (24h / 7d / 30d) stored in a dedicated table, with configurable sampling and retention.
 * Alert thresholds for CPU, memory, disk, autoloaded options and overdue cron events.
+* Site availability check every 5 minutes with down and recovery notifications.
+* Email alerts included, with de-duplication, reminder cooldowns and a daily cap.
+* Pro channels: generic webhook, Slack, Discord and Telegram (encrypted at rest).
+* Trend analysis against your own 7-day baseline - catches regression before any fixed threshold.
+* Forward-looking projections: days left on disk, database growth and month-end bandwidth usage.
 * Credentials encrypted at rest using WordPress salts and OpenSSL when available.
 * REST endpoints (`/wp-json/server-pulse/v1/`) for external monitoring.
 * No external calls unless you explicitly configure a provider. No data leaves your site.
@@ -63,6 +68,16 @@ In a custom table named `{prefix}sp_samples`. It is removed on uninstall.
 
 == Changelog ==
 
+= 3.1.0 =
+* Added: alert engine with per-rule thresholds, de-duplication, reminder cooldowns and a daily cap.
+* Added: site availability (uptime) check every 5 minutes with down and recovery notifications.
+* Added: email alert channel, included for free, with a styled HTML message.
+* Added: Pro channels (generic webhook, Slack, Discord, Telegram) gated behind a license check.
+* Added: trend analysis against a 7-day baseline with deviation alerts for CPU, memory, disk and PHP memory.
+* Added: capacity projections - days left on disk, database growth and month-end bandwidth, plus dashboard trends card.
+* Added: alerts log screen, dashboard alert history and a "send test alert" action.
+* Added: new `{prefix}sp_alerts` table and automatic schema upgrade.
+
 = 3.0.1 =
 * Fixed: WP Engine credentials were double-encrypted (HTTP 401). Encryption is now idempotent and self-healing.
 * Fixed: WP Engine limits endpoint and GB to bytes conversion.
@@ -77,6 +92,9 @@ In a custom table named `{prefix}sp_samples`. It is removed on uninstall.
 * WordPress.org friendly: i18n, nonces, capability checks and uninstall cleanup.
 
 == Upgrade Notice ==
+
+= 3.1.0 =
+Adds the alert engine: email alerts included, plus Pro webhook/Slack/Discord/Telegram channels. Review the new Alerts section in Settings.
 
 = 3.0.0 =
 Major rewrite. Please review the settings after upgrading.

@@ -21,6 +21,7 @@ class Server_Pulse_Repository {
 		'cpu_percent',
 		'memory_percent',
 		'disk_percent',
+		'disk_used',
 		'php_memory_percent',
 		'visit_count',
 		'bandwidth_total',

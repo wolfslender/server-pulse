@@ -20,6 +20,7 @@ class Server_Pulse_Deactivator {
 	public static function deactivate() {
 		wp_clear_scheduled_hook( 'server_pulse_sample_event' );
 		wp_clear_scheduled_hook( 'server_pulse_cleanup_event' );
+		wp_clear_scheduled_hook( 'server_pulse_alert_event' );
 		wp_clear_scheduled_hook( Server_Pulse_Storage_Scanner::EVENT );
 	}
 }

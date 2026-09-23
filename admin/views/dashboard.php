@@ -98,6 +98,36 @@ $server_pulse_statuses = ( new Server_Pulse_Provider_Manager() )->statuses();
 		</div>
 	</div>
 
+	<div class="sp-card sp-trends-card">
+		<header class="sp-chart-header">
+			<h2><?php esc_html_e( 'Trends & projections', 'server-pulse' ); ?></h2>
+			<span class="sp-trends-window" id="sp-trends-window"></span>
+		</header>
+		<div class="sp-trends-grid">
+			<div class="sp-trend" data-trend="cpu_percent">
+				<strong><?php esc_html_e( 'CPU', 'server-pulse' ); ?></strong>
+				<span class="sp-trend-value" id="sp-trend-value-cpu_percent">—</span>
+				<span class="sp-trend-avg" id="sp-trend-avg-cpu_percent"></span>
+			</div>
+			<div class="sp-trend" data-trend="memory_percent">
+				<strong><?php esc_html_e( 'Memory', 'server-pulse' ); ?></strong>
+				<span class="sp-trend-value" id="sp-trend-value-memory_percent">—</span>
+				<span class="sp-trend-avg" id="sp-trend-avg-memory_percent"></span>
+			</div>
+			<div class="sp-trend" data-trend="disk_percent">
+				<strong><?php esc_html_e( 'Disk', 'server-pulse' ); ?></strong>
+				<span class="sp-trend-value" id="sp-trend-value-disk_percent">—</span>
+				<span class="sp-trend-avg" id="sp-trend-avg-disk_percent"></span>
+			</div>
+			<div class="sp-trend" data-trend="php_memory_percent">
+				<strong><?php esc_html_e( 'PHP memory', 'server-pulse' ); ?></strong>
+				<span class="sp-trend-value" id="sp-trend-value-php_memory_percent">—</span>
+				<span class="sp-trend-avg" id="sp-trend-avg-php_memory_percent"></span>
+			</div>
+		</div>
+		<div class="sp-trends-detail" id="sp-trends-detail"></div>
+	</div>
+
 	<div class="sp-card sp-chart-card">
 		<header class="sp-chart-header">
 			<h2><?php esc_html_e( 'History', 'server-pulse' ); ?></h2>
@@ -154,10 +184,31 @@ $server_pulse_statuses = ( new Server_Pulse_Provider_Manager() )->statuses();
 	</div>
 
 	<div class="sp-card sp-alerts-card">
-		<h2><?php esc_html_e( 'Alerts', 'server-pulse' ); ?></h2>
+		<header class="sp-chart-header">
+			<h2><?php esc_html_e( 'Alerts', 'server-pulse' ); ?></h2>
+			<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-alerts' ) ); ?>"><?php esc_html_e( 'Alert log', 'server-pulse' ); ?></a>
+		</header>
 		<div id="sp-alerts">
 			<p class="sp-empty"><?php esc_html_e( 'No alerts. Everything looks healthy.', 'server-pulse' ); ?></p>
 		</div>
+	</div>
+
+	<div class="sp-card">
+		<h2><?php esc_html_e( 'Recent alert history', 'server-pulse' ); ?></h2>
+		<table class="widefat striped sp-table">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'When (UTC)', 'server-pulse' ); ?></th>
+					<th><?php esc_html_e( 'Rule', 'server-pulse' ); ?></th>
+					<th><?php esc_html_e( 'Severity', 'server-pulse' ); ?></th>
+					<th><?php esc_html_e( 'Status', 'server-pulse' ); ?></th>
+					<th><?php esc_html_e( 'Message', 'server-pulse' ); ?></th>
+				</tr>
+			</thead>
+			<tbody id="sp-alert-history-body">
+				<tr><td colspan="5"><?php esc_html_e( 'Loading…', 'server-pulse' ); ?></td></tr>
+			</tbody>
+		</table>
 	</div>
 
 	<div class="sp-card sp-notes" id="sp-notes"></div>
