@@ -94,5 +94,5 @@ GPL-2.0-or-later. See [LICENSE](LICENSE).
 
 ## Author
 
-Alexis Olivero · [https://oliverodev.pages.dev/](https://oliverodev.pages.dev/)
+Alexis Olivero · [https://oliverodev.com/](https://oliverodev.com/)
 
