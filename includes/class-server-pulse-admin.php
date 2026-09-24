@@ -34,6 +34,13 @@ class Server_Pulse_Admin {
 	private $alerts_hook = '';
 
 	/**
+	 * Diagnostics page hook.
+	 *
+	 * @var string
+	 */
+	private $advisor_hook = '';
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -42,6 +49,7 @@ class Server_Pulse_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
 		add_filter( 'plugin_action_links_' . SERVER_PULSE_BASENAME, array( $this, 'action_links' ) );
 		add_action( 'update_option_' . Server_Pulse_Settings::OPTION, array( $this, 'reschedule_cron' ), 10, 0 );
+		add_action( 'update_option_' . Server_Pulse_Settings::OPTION, array( $this, 'sync_loader' ), 10, 0 );
 	}
 
 	/**
@@ -76,6 +84,15 @@ class Server_Pulse_Admin {
 			'manage_options',
 			'server-pulse-alerts',
 			array( $this, 'render_alerts' )
+		);
+
+		$this->advisor_hook = add_submenu_page(
+			'server-pulse',
+			__( 'Server Pulse Diagnostics', 'server-pulse' ),
+			__( 'Diagnostics', 'server-pulse' ),
+			'manage_options',
+			'server-pulse-advisor',
+			array( $this, 'render_advisor' )
 		);
 	}
 
@@ -120,7 +137,10 @@ class Server_Pulse_Admin {
 	 * @return void
 	 */
 	public function enqueue( $hook ) {
-		if ( $hook !== $this->dashboard_hook && $hook !== $this->settings_hook && $hook !== $this->alerts_hook ) {
+		$is_widget = ( 'index.php' === $hook );
+		$is_page   = in_array( $hook, array( $this->dashboard_hook, $this->settings_hook, $this->alerts_hook, $this->advisor_hook ), true );
+
+		if ( ! $is_page && ! $is_widget ) {
 			return;
 		}
 
@@ -130,6 +150,54 @@ class Server_Pulse_Admin {
 			array(),
 			SERVER_PULSE_VERSION
 		);
+
+		if ( $is_widget ) {
+			return;
+		}
+
+		if ( $hook === $this->advisor_hook ) {
+			wp_enqueue_script(
+				'server-pulse-advisor',
+				SERVER_PULSE_URL . 'assets/js/advisor.js',
+				array(),
+				SERVER_PULSE_VERSION,
+				true
+			);
+
+			wp_localize_script(
+				'server-pulse-advisor',
+				'serverPulseAdvisor',
+				array(
+					'ajaxurl' => admin_url( 'admin-ajax.php' ),
+					'nonce'   => wp_create_nonce( 'server_pulse_nonce' ),
+					'i18n'    => array(
+						'running'    => __( 'Running diagnostics…', 'server-pulse' ),
+						'fixing'     => __( 'Applying fix…', 'server-pulse' ),
+						'error'      => __( 'Request failed.', 'server-pulse' ),
+						'confirm'    => __( 'Run this fix now?', 'server-pulse' ),
+						'empty'      => __( 'No findings yet.', 'server-pulse' ),
+						'applyFix'   => __( 'Apply fix', 'server-pulse' ),
+						'all'        => __( 'All', 'server-pulse' ),
+						'categories' => array(
+							'server'      => __( 'Server & PHP', 'server-pulse' ),
+							'database'    => __( 'Database', 'server-pulse' ),
+							'wordpress'   => __( 'WordPress', 'server-pulse' ),
+							'security'    => __( 'Security', 'server-pulse' ),
+							'performance' => __( 'Performance', 'server-pulse' ),
+							'storage'     => __( 'Storage', 'server-pulse' ),
+						),
+						'severities' => array(
+							'critical' => __( 'Critical', 'server-pulse' ),
+							'warning'  => __( 'Warning', 'server-pulse' ),
+							'info'     => __( 'Info', 'server-pulse' ),
+							'good'     => __( 'OK', 'server-pulse' ),
+						),
+					),
+				)
+			);
+
+			return;
+		}
 
 		if ( $hook === $this->settings_hook || $hook === $this->alerts_hook ) {
 			wp_enqueue_script(
@@ -195,19 +263,71 @@ class Server_Pulse_Admin {
 					'deviation' => isset( $sp_alerts['trend_deviation'] ) ? (int) $sp_alerts['trend_deviation'] : 15,
 				),
 				'i18n'     => array(
-					'loading'          => __( 'Collecting live metrics…', 'server-pulse' ),
-					'error'            => __( 'Could not fetch metrics.', 'server-pulse' ),
-					'notAvailable'     => __( 'Not available on this host', 'server-pulse' ),
-					'justNow'          => __( 'just now', 'server-pulse' ),
-					'updatedAgo'       => __( 'Updated %s ago', 'server-pulse' ),
-					'confirmed'        => __( 'Connection successful.', 'server-pulse' ),
-					'confirmPurge'     => __( 'Store a sample now?', 'server-pulse' ),
-					'scanning'         => __( 'Scanning storage… this can take a few seconds.', 'server-pulse' ),
-					'diskDaysLeft'     => __( '~%d days of disk left at the current pace', 'server-pulse' ),
-					'diskStable'       => __( 'Disk usage is steady', 'server-pulse' ),
-					'diskGrowth'       => __( 'Disk is growing %s/day', 'server-pulse' ),
-					'dbGrowth'         => __( 'Database is growing %s/day', 'server-pulse' ),
+					'loading'      => __( 'Collecting live metrics…', 'server-pulse' ),
+					'error'        => __( 'Could not fetch metrics.', 'server-pulse' ),
+					'notAvailable' => __( 'Not available on this host', 'server-pulse' ),
+					'scanning'     => __( 'Scanning storage… this can take a few seconds.', 'server-pulse' ),
+					'diskDaysLeft' => __( '~%d days of disk left at the current pace', 'server-pulse' ),
+					'diskStable'   => __( 'Disk usage is steady', 'server-pulse' ),
+					'diskGrowth'   => __( 'Disk is growing %s/day', 'server-pulse' ),
+					'dbGrowth'     => __( 'Database is growing %s/day', 'server-pulse' ),
 					'bandwidthProjected' => __( 'Bandwidth projected at ~%d%% of the monthly limit', 'server-pulse' ),
+					'cores'        => __( 'cores', 'server-pulse' ),
+					'load'         => __( 'load', 'server-pulse' ),
+					'files'        => __( 'files', 'server-pulse' ),
+					'db'           => __( 'DB', 'server-pulse' ),
+					'free'         => __( 'free', 'server-pulse' ),
+					'scannedWpContent' => __( 'Scanned wp-content', 'server-pulse' ),
+					'cdn'          => __( 'CDN', 'server-pulse' ),
+					'noData'       => __( 'No data.', 'server-pulse' ),
+					'noProcessData' => __( 'No process data available on this host.', 'server-pulse' ),
+					'noAlerts'     => __( 'No alerts. Everything looks healthy.', 'server-pulse' ),
+					'noAlertsRecorded' => __( 'No alerts recorded yet.', 'server-pulse' ),
+					'enabled'      => __( 'Enabled', 'server-pulse' ),
+					'disabled'     => __( 'Disabled', 'server-pulse' ),
+					'on'           => __( 'On', 'server-pulse' ),
+					'off'          => __( 'Off', 'server-pulse' ),
+					'statusActive' => __( 'Active', 'server-pulse' ),
+					'statusResolved' => __( 'Resolved', 'server-pulse' ),
+					'avg'          => __( 'avg %s', 'server-pulse' ),
+					'deviation'    => __( 'Deviation %s pts', 'server-pulse' ),
+					'detectedNotConfigured' => __( 'detected on this host but not configured or enabled.', 'server-pulse' ),
+					'openSettings' => __( 'Open settings', 'server-pulse' ),
+					'severities'   => array(
+						'critical' => __( 'Critical', 'server-pulse' ),
+						'warning'  => __( 'Warning', 'server-pulse' ),
+						'info'     => __( 'Info', 'server-pulse' ),
+						'good'     => __( 'OK', 'server-pulse' ),
+					),
+					'labels'       => array(
+						'posts'            => __( 'Posts', 'server-pulse' ),
+						'pages'            => __( 'Pages', 'server-pulse' ),
+						'comments'         => __( 'Comments', 'server-pulse' ),
+						'users'            => __( 'Users', 'server-pulse' ),
+						'dbSize'           => __( 'Database size', 'server-pulse' ),
+						'dbTables'         => __( 'Database tables', 'server-pulse' ),
+						'dbAutoload'       => __( 'Autoloaded options', 'server-pulse' ),
+						'revisions'        => __( 'Revisions', 'server-pulse' ),
+						'transients'       => __( 'Transients', 'server-pulse' ),
+						'cronOverdue'      => __( 'Overdue cron events', 'server-pulse' ),
+						'objectCache'      => __( 'Object cache', 'server-pulse' ),
+						'storageScan'      => __( 'Storage scan (wp-content)', 'server-pulse' ),
+						'uploads'          => __( 'Uploads', 'server-pulse' ),
+						'plugins'          => __( 'Plugins', 'server-pulse' ),
+						'themes'           => __( 'Themes', 'server-pulse' ),
+						'wordpress'        => __( 'WordPress', 'server-pulse' ),
+						'php'              => __( 'PHP', 'server-pulse' ),
+						'mysql'            => __( 'MySQL / MariaDB', 'server-pulse' ),
+						'theme'            => __( 'Theme', 'server-pulse' ),
+						'activePlugins'    => __( 'Active plugins', 'server-pulse' ),
+						'maxExecution'     => __( 'Max execution time', 'server-pulse' ),
+						'uploadMax'        => __( 'Upload max filesize', 'server-pulse' ),
+						'postMax'          => __( 'Post max size', 'server-pulse' ),
+						'opcache'          => __( 'OPcache', 'server-pulse' ),
+						'wpDebug'          => __( 'WP_DEBUG', 'server-pulse' ),
+						'wpCron'           => __( 'WP-Cron', 'server-pulse' ),
+						'uptime'           => __( 'Uptime', 'server-pulse' ),
+					),
 				),
 			)
 		);
@@ -260,6 +380,23 @@ class Server_Pulse_Admin {
 	}
 
 	/**
+	 * Render the diagnostics advisor view.
+	 *
+	 * @return void
+	 */
+	public function render_advisor() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'server-pulse' ) );
+		}
+
+		$snapshot = server_pulse()->collector->get_snapshot( false );
+		$summary  = isset( $snapshot['summary'] ) ? $snapshot['summary'] : array();
+		$report   = server_pulse()->advisor->report( false, $summary );
+
+		include SERVER_PULSE_DIR . 'admin/views/advisor.php';
+	}
+
+	/**
 	 * Reschedule cron when settings change.
 	 *
 	 * @return void
@@ -276,6 +413,10 @@ class Server_Pulse_Admin {
 		wp_clear_scheduled_hook( 'server_pulse_sample_event' );
 		wp_schedule_event( time() + 60, $interval, 'server_pulse_sample_event' );
 
+		if ( class_exists( 'Server_Pulse_Cron' ) ) {
+			Server_Pulse_Cron::schedule_events();
+		}
+
 		if ( ! empty( $raw['enable_storage_scan'] ) ) {
 			if ( ! wp_next_scheduled( Server_Pulse_Storage_Scanner::EVENT ) ) {
 				wp_schedule_event( time() + 600, 'daily', Server_Pulse_Storage_Scanner::EVENT );
@@ -284,12 +425,37 @@ class Server_Pulse_Admin {
 			wp_clear_scheduled_hook( Server_Pulse_Storage_Scanner::EVENT );
 		}
 
-		if ( ! wp_next_scheduled( 'server_pulse_alert_event' ) ) {
-			wp_schedule_event( time() + 300, 'server_pulse_five_minutes', 'server_pulse_alert_event' );
-		}
-
 		// Force a fresh collection after settings change.
 		delete_transient( Server_Pulse_Collector::CACHE_KEY );
 		delete_transient( Server_Pulse_WpEngine_Provider::CACHE_KEY );
+	}
+
+	/**
+	 * Install or remove the early loader when its setting changes.
+	 *
+	 * @return void
+	 */
+	public function sync_loader() {
+		if ( ! class_exists( 'Server_Pulse_Loader' ) ) {
+			return;
+		}
+
+		$raw     = get_option( Server_Pulse_Settings::OPTION, array() );
+		$enabled = is_array( $raw ) && ! empty( $raw['sentinel_loader'] );
+
+		$result = Server_Pulse_Loader::sync( $enabled );
+
+		if ( is_wp_error( $result ) ) {
+			add_settings_error(
+				'server_pulse_settings_group',
+				'server_pulse_loader',
+				sprintf(
+					/* translators: %s: error message. */
+					__( 'The early crash loader could not be updated: %s', 'server-pulse' ),
+					$result->get_error_message()
+				),
+				'error'
+			);
+		}
 	}
 }

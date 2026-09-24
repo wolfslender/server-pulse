@@ -55,6 +55,13 @@ class Server_Pulse_Rest_Controller {
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_snapshot' ),
 				'permission_callback' => array( $this, 'can_manage' ),
+				'args'                => array(
+					'force' => array(
+						'type'              => 'boolean',
+						'default'           => false,
+						'sanitize_callback' => 'rest_sanitize_boolean',
+					),
+				),
 			)
 		);
 

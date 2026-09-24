@@ -80,7 +80,7 @@
 				'text-anchor': 'middle',
 				class: 'sp-chart-empty'
 			});
-			empty.textContent = 'No data yet';
+			empty.textContent = this.opts.emptyLabel || 'No data yet';
 			this.svg.appendChild(empty);
 			this.value.textContent = '—';
 			return;

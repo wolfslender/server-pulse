@@ -9,6 +9,9 @@
 	}
 
 	var config = window.serverPulse;
+	var i18n = config.i18n || {};
+	var L = i18n.labels || {};
+	var SEV = i18n.severities || {};
 	var charts = {};
 	var historyDays = 7;
 	var autoTimer = null;
@@ -131,24 +134,27 @@
 		var cpuPercent = hasValue(summary.cpu_percent) ? summary.cpu_percent : null;
 		var cpuSub = '';
 		if (hasValue(summary.cpu_cores)) {
-			cpuSub = summary.cpu_cores + ' cores';
+			cpuSub = summary.cpu_cores + ' ' + i18n.cores;
 			if (summary.cpu_load) {
-				cpuSub += ' · load ' + summary.cpu_load.one;
+				cpuSub += ' · ' + i18n.load + ' ' + summary.cpu_load.one;
 			}
 		}
 		setMeter('cpu', cpuPercent, { data: data, sub: cpuSub });
 
 		// Memory.
 		var memPercent = hasValue(summary.memory_percent) ? summary.memory_percent : null;
+		var memKey = 'memory_percent';
 		var memSub = '';
 		if (hasValue(summary.memory_total) && hasValue(summary.memory_used)) {
 			memSub = formatBytes(summary.memory_used) + ' / ' + formatBytes(summary.memory_total);
 			memPercent = summary.memory_percent;
+			memKey = 'memory_percent';
 		} else if (hasValue(summary.php_memory_percent)) {
 			memSub = 'PHP ' + formatBytes(summary.php_memory_used) + ' / ' + formatBytes(summary.php_memory_limit);
 			memPercent = summary.php_memory_percent;
+			memKey = 'php_memory_percent';
 		}
-		setMeter('memory', memPercent, { data: data, key: 'memory_percent', sub: memSub });
+		setMeter('memory', memPercent, { data: data, key: memKey, sub: memSub });
 
 		// Disk.
 		var diskPercent = hasValue(summary.disk_percent) ? summary.disk_percent : null;
@@ -161,21 +167,21 @@
 				diskSub += ' / ' + formatBytes(summary.disk_total);
 			}
 			if (hasValue(summary.disk_files) || hasValue(summary.disk_database)) {
-				diskSub += ' · files ' + formatBytes(summary.disk_files) + ', DB ' + formatBytes(summary.disk_database);
+				diskSub += ' · ' + i18n.files + ' ' + formatBytes(summary.disk_files) + ', ' + i18n.db + ' ' + formatBytes(summary.disk_database);
 			}
 		} else if (hasValue(summary.disk_free)) {
-			diskSub = formatBytes(summary.disk_free) + ' free';
+			diskSub = formatBytes(summary.disk_free) + ' ' + i18n.free;
 		} else if (hasValue(summary.storage_scan_total)) {
 			diskValueText = formatBytes(summary.storage_scan_total);
-			diskSub = 'Scanned wp-content';
+			diskSub = i18n.scannedWpContent;
 			if (hasValue(summary.storage_scan_uploads)) {
-				diskSub += ' · uploads ' + formatBytes(summary.storage_scan_uploads);
+				diskSub += ' · ' + L.uploads.toLowerCase() + ' ' + formatBytes(summary.storage_scan_uploads);
 			}
 			if (hasValue(summary.storage_scan_plugins)) {
-				diskSub += ' · plugins ' + formatBytes(summary.storage_scan_plugins);
+				diskSub += ' · ' + L.plugins.toLowerCase() + ' ' + formatBytes(summary.storage_scan_plugins);
 			}
 			if (hasValue(summary.storage_scan_themes)) {
-				diskSub += ' · themes ' + formatBytes(summary.storage_scan_themes);
+				diskSub += ' · ' + L.themes.toLowerCase() + ' ' + formatBytes(summary.storage_scan_themes);
 			}
 		}
 
@@ -196,7 +202,7 @@
 		setText('sp-traffic-bandwidth', hasValue(summary.bandwidth_total) ? formatBytes(summary.bandwidth_total) : '—');
 		var trafficSub = $('sp-sub-traffic');
 		if (trafficSub) {
-			trafficSub.textContent = hasValue(summary.bandwidth_cdn) ? 'CDN ' + formatBytes(summary.bandwidth_cdn) : '';
+			trafficSub.textContent = hasValue(summary.bandwidth_cdn) ? i18n.cdn + ' ' + formatBytes(summary.bandwidth_cdn) : '';
 		}
 	}
 
@@ -204,51 +210,51 @@
 		if (!hasValue(value)) {
 			return '';
 		}
-		return '<tr><td>' + label + '</td><td><strong>' + value + '</strong></td></tr>';
+		return '<tr><td>' + escapeHtml(label) + '</td><td><strong>' + escapeHtml(value) + '</strong></td></tr>';
 	}
 
 	function renderWordPress(summary) {
 		var html = '';
-		html += row('Posts', hasValue(summary.posts) ? formatNumber(summary.posts) : '');
-		html += row('Pages', hasValue(summary.pages) ? formatNumber(summary.pages) : '');
-		html += row('Comments', hasValue(summary.comments) ? formatNumber(summary.comments) : '');
-		html += row('Users', hasValue(summary.users) ? formatNumber(summary.users) : '');
-		html += row('Database size', hasValue(summary.db_size) ? formatBytes(summary.db_size) : '');
-		html += row('Database tables', hasValue(summary.db_tables) ? formatNumber(summary.db_tables) : '');
-		html += row('Autoloaded options', hasValue(summary.db_autoload) ? formatBytes(summary.db_autoload) : '');
-		html += row('Revisions', hasValue(summary.db_revisions) ? formatNumber(summary.db_revisions) + ' (' + formatBytes(summary.db_revisions_size) + ')' : '');
-		html += row('Transients', hasValue(summary.db_transients) ? formatNumber(summary.db_transients) : '');
-		html += row('Overdue cron events', hasValue(summary.cron_overdue) ? formatNumber(summary.cron_overdue) : '');
-		html += row('Object cache', hasValue(summary.object_cache) ? (summary.object_cache ? 'Enabled' : 'Disabled') : '');
-		html += row('Storage scan (wp-content)', hasValue(summary.storage_scan_total) ? formatBytes(summary.storage_scan_total) : '');
-		html += row('Uploads', hasValue(summary.storage_scan_uploads) ? formatBytes(summary.storage_scan_uploads) : '');
-		html += row('Plugins', hasValue(summary.storage_scan_plugins) ? formatBytes(summary.storage_scan_plugins) : '');
-		html += row('Themes', hasValue(summary.storage_scan_themes) ? formatBytes(summary.storage_scan_themes) : '');
+		html += row(L.posts, hasValue(summary.posts) ? formatNumber(summary.posts) : '');
+		html += row(L.pages, hasValue(summary.pages) ? formatNumber(summary.pages) : '');
+		html += row(L.comments, hasValue(summary.comments) ? formatNumber(summary.comments) : '');
+		html += row(L.users, hasValue(summary.users) ? formatNumber(summary.users) : '');
+		html += row(L.dbSize, hasValue(summary.db_size) ? formatBytes(summary.db_size) : '');
+		html += row(L.dbTables, hasValue(summary.db_tables) ? formatNumber(summary.db_tables) : '');
+		html += row(L.dbAutoload, hasValue(summary.db_autoload) ? formatBytes(summary.db_autoload) : '');
+		html += row(L.revisions, hasValue(summary.db_revisions) ? formatNumber(summary.db_revisions) + ' (' + formatBytes(summary.db_revisions_size) + ')' : '');
+		html += row(L.transients, hasValue(summary.db_transients) ? formatNumber(summary.db_transients) : '');
+		html += row(L.cronOverdue, hasValue(summary.cron_overdue) ? formatNumber(summary.cron_overdue) : '');
+		html += row(L.objectCache, hasValue(summary.object_cache) ? (summary.object_cache ? i18n.enabled : i18n.disabled) : '');
+		html += row(L.storageScan, hasValue(summary.storage_scan_total) ? formatBytes(summary.storage_scan_total) : '');
+		html += row(L.uploads, hasValue(summary.storage_scan_uploads) ? formatBytes(summary.storage_scan_uploads) : '');
+		html += row(L.plugins, hasValue(summary.storage_scan_plugins) ? formatBytes(summary.storage_scan_plugins) : '');
+		html += row(L.themes, hasValue(summary.storage_scan_themes) ? formatBytes(summary.storage_scan_themes) : '');
 
 		var body = $('sp-wordpress-body');
 		if (body) {
-			body.innerHTML = html || '<tr><td colspan="2">No data.</td></tr>';
+			body.innerHTML = html || '<tr><td colspan="2">' + escapeHtml(i18n.noData) + '</td></tr>';
 		}
 	}
 
 	function renderEnvironment(summary) {
 		var html = '';
-		html += row('WordPress', summary.wp_version);
-		html += row('PHP', summary.php_version);
-		html += row('MySQL / MariaDB', summary.mysql_version);
-		html += row('Theme', summary.theme);
-		html += row('Active plugins', hasValue(summary.plugins_active) ? summary.plugins_active + ' / ' + summary.plugins_total : '');
-		html += row('Max execution time', hasValue(summary.max_execution) ? summary.max_execution + 's' : '');
-		html += row('Upload max filesize', hasValue(summary.upload_max) ? formatBytes(summary.upload_max) : '');
-		html += row('Post max size', hasValue(summary.post_max) ? formatBytes(summary.post_max) : '');
-		html += row('OPcache', hasValue(summary.opcache) ? (summary.opcache ? 'Enabled' : 'Disabled') : '');
-		html += row('WP_DEBUG', hasValue(summary.wp_debug) ? (summary.wp_debug ? 'On' : 'Off') : '');
-		html += row('WP-Cron', hasValue(summary.wp_cron_disabled) ? (summary.wp_cron_disabled ? 'Disabled' : 'Enabled') : '');
-		html += row('Uptime', hasValue(summary.uptime) ? formatUptime(summary.uptime) : '');
+		html += row(L.wordpress, summary.wp_version);
+		html += row(L.php, summary.php_version);
+		html += row(L.mysql, summary.mysql_version);
+		html += row(L.theme, summary.theme);
+		html += row(L.activePlugins, hasValue(summary.plugins_active) ? summary.plugins_active + ' / ' + summary.plugins_total : '');
+		html += row(L.maxExecution, hasValue(summary.max_execution) ? summary.max_execution + 's' : '');
+		html += row(L.uploadMax, hasValue(summary.upload_max) ? formatBytes(summary.upload_max) : '');
+		html += row(L.postMax, hasValue(summary.post_max) ? formatBytes(summary.post_max) : '');
+		html += row(L.opcache, hasValue(summary.opcache) ? (summary.opcache ? i18n.enabled : i18n.disabled) : '');
+		html += row(L.wpDebug, hasValue(summary.wp_debug) ? (summary.wp_debug ? i18n.on : i18n.off) : '');
+		html += row(L.wpCron, hasValue(summary.wp_cron_disabled) ? (summary.wp_cron_disabled ? i18n.disabled : i18n.enabled) : '');
+		html += row(L.uptime, hasValue(summary.uptime) ? formatUptime(summary.uptime) : '');
 
 		var body = $('sp-environment-body');
 		if (body) {
-			body.innerHTML = html || '<tr><td colspan="2">No data.</td></tr>';
+			body.innerHTML = html || '<tr><td colspan="2">' + escapeHtml(i18n.noData) + '</td></tr>';
 		}
 	}
 
@@ -273,7 +279,7 @@
 		}
 
 		if (!Array.isArray(summary.processes) || !summary.processes.length) {
-			body.innerHTML = '<tr><td colspan="5">No process data available on this host.</td></tr>';
+			body.innerHTML = '<tr><td colspan="5">' + escapeHtml(i18n.noProcessData) + '</td></tr>';
 			return;
 		}
 
@@ -285,11 +291,11 @@
 					'</td><td>' +
 					escapeHtml(proc.user) +
 					'</td><td>' +
-					proc.pid +
+					escapeHtml(proc.pid) +
 					'</td><td>' +
-					proc.cpu +
+					escapeHtml(proc.cpu) +
 					'</td><td>' +
-					proc.memory +
+					escapeHtml(proc.memory) +
 					'</td></tr>'
 				);
 			})
@@ -304,13 +310,13 @@
 
 		var alerts = (health && health.alerts) || [];
 		if (!alerts.length) {
-			container.innerHTML = '<p class="sp-empty">No alerts. Everything looks healthy.</p>';
+			container.innerHTML = '<p class="sp-empty">' + escapeHtml(i18n.noAlerts) + '</p>';
 			return;
 		}
 
 		container.innerHTML = alerts
 			.map(function (alert) {
-				return '<div class="sp-alert is-' + alert.severity + '"><span class="sp-alert-dot"></span>' + escapeHtml(alert.message) + '</div>';
+				return '<div class="sp-alert is-' + escapeHtml(alert.severity) + '"><span class="sp-alert-dot"></span>' + escapeHtml(alert.message) + '</div>';
 			})
 			.join('');
 	}
@@ -322,13 +328,13 @@
 		}
 
 		if (!Array.isArray(alerts) || !alerts.length) {
-			body.innerHTML = '<tr><td colspan="5">No alerts recorded yet.</td></tr>';
+			body.innerHTML = '<tr><td colspan="5">' + escapeHtml(i18n.noAlertsRecorded) + '</td></tr>';
 			return;
 		}
 
 		body.innerHTML = alerts
 			.map(function (alert) {
-				var status = alert.status === 'active' ? 'Active' : 'Resolved';
+				var status = alert.status === 'active' ? i18n.statusActive : i18n.statusResolved;
 				return (
 					'<tr><td>' +
 					escapeHtml(alert.created_at) +
@@ -337,7 +343,7 @@
 					'</td><td><span class="sp-sev is-' +
 					escapeHtml(alert.severity) +
 					'">' +
-					escapeHtml(alert.severity) +
+					escapeHtml(SEV[alert.severity] || alert.severity) +
 					'</span></td><td>' +
 					escapeHtml(status) +
 					'</td><td>' +
@@ -406,10 +412,10 @@
 			valueNode.textContent = formatPercent(current);
 			valueNode.className = 'sp-trend-value ' + (deviating ? (deviation > 0 ? 'is-high' : 'is-low') : 'is-ok');
 			if (avgNode) {
-				avgNode.textContent = 'avg ' + formatPercent(average);
+				avgNode.textContent = i18n.avg.replace('%s', formatPercent(average));
 			}
 			if (card) {
-				card.title = 'Deviation ' + (deviation >= 0 ? '+' : '') + deviation.toFixed(1) + ' pts';
+				card.title = i18n.deviation.replace('%s', (deviation >= 0 ? '+' : '') + deviation.toFixed(1));
 			}
 		});
 
@@ -497,10 +503,12 @@
 					'<p><strong>' +
 						escapeHtml(status.label) +
 						':</strong> ' +
-						escapeHtml('detected on this host but not configured or enabled.') +
+						escapeHtml(i18n.detectedNotConfigured) +
 						' <a href="' +
 						settingsUrl +
-						'">Open settings</a></p>'
+						'">' +
+						escapeHtml(i18n.openSettings) +
+						'</a></p>'
 				);
 			}
 		});
@@ -573,7 +581,8 @@
 			var metric = container.getAttribute('data-metric');
 			charts[metric] = new window.ServerPulseChart(container, {
 				label: container.getAttribute('data-label') || metric,
-				unit: container.getAttribute('data-unit') || ''
+				unit: container.getAttribute('data-unit') || '',
+				emptyLabel: i18n.noData
 			});
 		});
 	}

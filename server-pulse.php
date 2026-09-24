@@ -3,7 +3,7 @@
  * Plugin Name:       Server Pulse
  * Plugin URI:        https://github.com/wolfslender/server-pulse
  * Description:       Real-time server and WordPress health monitoring for any host. Native, cPanel, WP Engine and WordPress data providers with history, health score and alerts.
- * Version:           3.1.0
+ * Version:           3.6.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Alexis Olivero
@@ -18,8 +18,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SERVER_PULSE_VERSION', '3.1.0' );
-define( 'SERVER_PULSE_DB_VERSION', '2' );
+define( 'SERVER_PULSE_VERSION', '3.6.0' );
+define( 'SERVER_PULSE_DB_VERSION', '4' );
 define( 'SERVER_PULSE_FILE', __FILE__ );
 define( 'SERVER_PULSE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SERVER_PULSE_URL', plugin_dir_url( __FILE__ ) );

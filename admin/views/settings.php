@@ -152,9 +152,25 @@ $statuses = isset( $statuses ) ? $statuses : array();
 					<th scope="row"><?php esc_html_e( 'Use SSL', 'server-pulse' ); ?></th>
 					<td><label><input type="checkbox" name="server_pulse_settings[cpanel_ssl]" value="1" <?php checked( $settings['cpanel_ssl'], 1 ); ?> /> <?php esc_html_e( 'Connect over HTTPS', 'server-pulse' ); ?></label></td>
 				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Verify certificate', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[cpanel_ssl_verify]" value="1" <?php checked( ! empty( $settings['cpanel_ssl_verify'] ) ); ?> /> <?php esc_html_e( 'Verify the TLS certificate (recommended)', 'server-pulse' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Only disable this for a cPanel server with a self-signed certificate you control. Disabling it exposes the API token to interception.', 'server-pulse' ); ?></p></td>
+				</tr>
 			</table>
 			<button type="button" class="button sp-test" data-provider="cpanel"><?php esc_html_e( 'Test connection', 'server-pulse' ); ?></button>
 			<span class="sp-test-result" id="sp-test-cpanel"></span>
+		</div>
+
+		<div class="sp-card">
+			<h2><?php esc_html_e( 'Outbound requests', 'server-pulse' ); ?></h2>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Private network targets', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[allow_private_network]" value="1" <?php checked( ! empty( $settings['allow_private_network'] ) ); ?> /> <?php esc_html_e( 'Allow webhooks and cPanel to reach private, loopback or reserved addresses', 'server-pulse' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Off by default. Keeping it off blocks SSRF to internal services and cloud metadata (169.254.169.254). Enable only if you intentionally monitor a host on a private network.', 'server-pulse' ); ?></p></td>
+				</tr>
+			</table>
 		</div>
 
 		<?php
@@ -283,6 +299,44 @@ $statuses = isset( $statuses ) ? $statuses : array();
 				<span class="sp-test-result" id="sp-test-alert-result"></span>
 			</p>
 			<p class="description"><?php esc_html_e( 'Save your changes before sending a test.', 'server-pulse' ); ?></p>
+		</div>
+
+		<div class="sp-card">
+			<h2><?php esc_html_e( 'Plan', 'server-pulse' ); ?> <span class="sp-badge <?php echo $sp_pro ? 'is-on' : ''; ?>"><?php echo esc_html( $sp_pro ? __( 'Pro', 'server-pulse' ) : __( 'Free', 'server-pulse' ) ); ?></span></h2>
+			<p class="description"><?php esc_html_e( 'Pro channels and future Pro modules are gated behind a single license check. Use the switch below to unlock Pro features for testing and development.', 'server-pulse' ); ?></p>
+			<?php if ( ! Server_Pulse_Crypto::is_secure() ) : ?>
+				<div class="notice notice-error inline">
+					<p><?php esc_html_e( 'OpenSSL with AES-256-GCM is not available on this server. Provider credentials cannot be encrypted securely and are stored obfuscated only. Install/enable the PHP OpenSSL extension before saving secrets.', 'server-pulse' ); ?></p>
+				</div>
+			<?php endif; ?>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Pro (development)', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[pro_dev_mode]" value="1" <?php checked( ! empty( $settings['pro_dev_mode'] ) ); ?> /> <?php esc_html_e( 'Unlock Pro features on this install (for testing only)', 'server-pulse' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Developers can also force this with the server_pulse_is_pro filter.', 'server-pulse' ); ?></p></td>
+				</tr>
+			</table>
+		</div>
+
+		<div class="sp-card">
+			<h2><?php esc_html_e( 'Crash protection (Sentinel)', 'server-pulse' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Watches plugin activations out of band. If an activation kills PHP (an nginx 502, an out-of-memory kill or a timeout) Server Pulse remembers which plugin it was and offers to roll the change back.', 'server-pulse' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Crash sentinel', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[sentinel_enabled]" value="1" <?php checked( ! empty( $settings['sentinel_enabled'] ) ); ?> /> <?php esc_html_e( 'Detect activations that crash the request', 'server-pulse' ); ?></label></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Auto rollback', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[sentinel_auto_rollback]" value="1" <?php checked( ! empty( $settings['sentinel_auto_rollback'] ) ); ?> /> <?php esc_html_e( 'Automatically deactivate the plugin that crashed (recommended for production)', 'server-pulse' ); ?></label>
+					<p class="description"><?php esc_html_e( 'When off, you get a one-click rollback button instead.', 'server-pulse' ); ?></p></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Early loader', 'server-pulse' ); ?></th>
+					<td><label><input type="checkbox" name="server_pulse_settings[sentinel_loader]" value="1" <?php checked( ! empty( $settings['sentinel_loader'] ) ); ?> /> <?php esc_html_e( 'Install the mu-plugin loader that deactivates a crashing plugin before it loads again', 'server-pulse' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Writes a small file to wp-content/mu-plugins/. This is what rescues a site where the plugin fatal-errors on every load. Removing the file is safe.', 'server-pulse' ); ?></p></td>
+				</tr>
+			</table>
 		</div>
 
 		<?php submit_button(); ?>

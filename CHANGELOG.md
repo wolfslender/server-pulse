@@ -2,6 +2,66 @@
 
 All notable changes to this project are documented here.
 
+## [3.6.0] - 2026-09-23
+
+### Fixed
+- Fresh activations now schedule the 5-minute uptime check: the custom interval is registered before scheduling, so site-down alerts work on new installs.
+- Notification bookkeeping no longer counts a failed channel (`WP_Error`) as delivered, the daily cap counts the actual notifications sent in the last 24 hours instead of the lifetime total, and critical escalations bypass the reminder cooldown.
+- Capacity projection alerts resolve correctly when the projection becomes unavailable.
+- The dashboard escapes theme, version and process values before injecting them, closing a DOM-XSS vector.
+- cPanel resource values (disk, bandwidth, database) are converted from the UAPI megabytes to bytes so they merge correctly with other providers; the port follows the SSL setting when left at the default.
+- The `enable_native` and `enable_wordpress` settings are now honoured by their providers.
+- Outbound requests disable redirects so a validated public host cannot bounce to a private address, and WordPress's own unsafe-URL check is enabled as a second layer.
+- Credentials fall back to an HMAC-authenticated keystream (instead of reversible base64) when OpenSSL is missing; the encryption and sentinel HMAC keys mix in a per-install random secret, and the CBC fallback is authenticated.
+- "Delete revisions" now keeps the newest revisions per post and respects `WP_POST_REVISIONS`; transient cleanup also removes site/network transients.
+- The sentinel no longer raises a false crash for slow activations (fixed window widened) and the uptime check requires two consecutive failures before alerting.
+- Resolved alerts are pruned with the retention window and the alerts table indexes `last_notified`.
+
+### Security
+- Added an outbound URL guard that blocks SSRF to private, loopback and reserved addresses (including cloud metadata 169.254.169.254), applied to webhooks and the cPanel provider, with an explicit opt-in for private networks.
+- cPanel TLS certificate verification is now configurable and on by default (previously always disabled).
+- The crash marker is HMAC-signed; the early loader and the sentinel refuse to act on an unsigned or tampered marker.
+- Activation guarding now only arms on a nonce-verified activation request.
+- Credentials now use AES-256-GCM (authenticated) with `random_bytes()`, keeping backward compatibility with the legacy CBC format; a warning is shown when the platform cannot encrypt securely.
+- Added per-user throttling to costly AJAX actions.
+- Hardened the WP Engine password sanitizer against double encryption; completed uninstall cleanup; the early loader now updates itself when the bundled file changes.
+
+## [3.5.0] - 2026-09-23
+
+### Added
+- **WordPress dashboard widget** with activation-crash alerts, diagnostics counts and a list of plugins whose declared requirements the environment cannot meet.
+- **Pro development switch** (Settings → Plan) that unlocks Pro features for testing; can also be forced with the `server_pulse_is_pro` filter.
+- Crash notices are now derived from persisted history, so they no longer expire and can be dismissed explicitly.
+
+### Changed
+- Detection also runs on the WordPress dashboard and Server Pulse screens, not only on the plugins screen.
+- The diagnostics report is computed during sampling and cached, so the dashboard, widget and cards read cached data instead of running checks on page load.
+- The crash-marker option is autoloaded to keep the early loader query-free.
+
+## [3.4.0] - 2026-09-23
+
+### Added
+- **Early crash loader** (optional mu-plugin): deactivates the offending plugin before regular plugins load, so a plugin that fatal-errors on every load can no longer lock the admin out.
+- Settings toggle to install/remove the loader; the file is copied to `wp-content/mu-plugins/`.
+- The marker option is now autoloaded so the loader can read it with no extra query per request.
+
+## [3.3.0] - 2026-09-23
+
+### Added
+- **Crash sentinel**: detects plugin activations that kill the PHP worker (nginx 502, OOM kill or timeout) out of band, records the offending plugin, how far it got and whether PHP caught a fatal.
+- One-click **rollback** to deactivate the crashing plugin and restore the previous active plugins, plus an optional auto-rollback for production.
+- Admin notice on the plugins screen explaining the crash and offering the rollback.
+- Diagnostics advisor now surfaces recent activation crashes.
+
+## [3.2.0] - 2026-09-23
+
+### Added
+- **Diagnostics advisor** inside the plugin: read-only checks across server, PHP, WordPress, database and security, each with a plain-language explanation and a recommended fix.
+- One-click safe fixes: purge expired transients, delete post revisions and clear `wp-content/debug.log`.
+- **Hosting environment detection**: identifies managed WordPress hosts (WP Engine, Flywheel, Kinsta, Cloudways, SiteGround, Hostinger, Pressable, WP Cloud, Pantheon, Platform.sh, Rocket.net, Nexcess, Servebolt…), control panels (cPanel/WHM, Plesk, DirectAdmin, ISPConfig, Webmin, HestiaCP, VestaCP, CWP, CyberPanel, InterWorx, CloudPanel, aaPanel, RunCloud, GridPane, SpinupWP, ServerPilot, Ploi, Forge…) and cloud/container platforms (AWS, GCP, Azure, DigitalOcean, Linode, Vultr, Hetzner, UpCloud, Docker, Kubernetes).
+- New **Diagnostics** admin screen and a diagnostics summary card on the dashboard.
+- AJAX actions `server_pulse_get_advisor` and `server_pulse_run_fix`.
+
 ## [3.1.0] - 2026-09-22
 
 ### Added

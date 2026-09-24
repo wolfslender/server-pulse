@@ -24,12 +24,14 @@ class Server_Pulse_License {
 	 * @return bool
 	 */
 	public static function is_pro() {
+		$dev = Server_Pulse_Settings::get( 'pro_dev_mode', 0 );
+
 		/**
 		 * Filter whether Pro features are unlocked.
 		 *
 		 * @param bool $is_pro Current state.
 		 */
-		return (bool) apply_filters( 'server_pulse_is_pro', false );
+		return (bool) apply_filters( 'server_pulse_is_pro', (bool) $dev );
 	}
 
 	/**

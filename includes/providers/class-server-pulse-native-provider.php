@@ -37,6 +37,10 @@ class Server_Pulse_Native_Provider extends Server_Pulse_Abstract_Provider {
 	 * @inheritDoc
 	 */
 	public function is_available() {
+		if ( ! (int) Server_Pulse_Settings::get( 'enable_native', 1 ) ) {
+			return false;
+		}
+
 		return Server_Pulse_Util::has_function( 'sys_getloadavg' ) || is_readable( '/proc/meminfo' ) || is_readable( '/proc/loadavg' );
 	}
 
@@ -259,11 +263,17 @@ class Server_Pulse_Native_Provider extends Server_Pulse_Abstract_Provider {
 		$out = 0;
 
 		foreach ( explode( "\n", $raw ) as $line ) {
-			if ( false === strpos( $line, ':' ) ) {
+			$colon = strpos( $line, ':' );
+			if ( false === $colon ) {
 				continue;
 			}
 
-			$parts = preg_split( '/\s+/', trim( substr( $line, strpos( $line, ':' ) + 1 ) ) );
+			$name = trim( substr( $line, 0, $colon ) );
+			if ( $this->is_virtual_interface( $name ) ) {
+				continue;
+			}
+
+			$parts = preg_split( '/\s+/', trim( substr( $line, $colon + 1 ) ) );
 			if ( count( $parts ) < 10 ) {
 				continue;
 			}
@@ -279,6 +289,28 @@ class Server_Pulse_Native_Provider extends Server_Pulse_Abstract_Provider {
 	}
 
 	/**
+	 * Whether a network interface is loopback or virtual.
+	 *
+	 * @param string $name Interface name.
+	 * @return bool
+	 */
+	private function is_virtual_interface( $name ) {
+		$name = strtolower( (string) $name );
+
+		if ( in_array( $name, array( 'lo', 'lo0' ), true ) ) {
+			return true;
+		}
+
+		foreach ( array( 'docker', 'veth', 'br-', 'virbr', 'vmnet', 'tun', 'tap', 'vnet', 'utun', 'awdl', 'llw', 'bridge', 'bond', 'dummy' ) as $prefix ) {
+			if ( 0 === strpos( $name, $prefix ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Top processes (requires shell permission).
 	 *
 	 * @return array|null
@@ -288,21 +320,23 @@ class Server_Pulse_Native_Provider extends Server_Pulse_Abstract_Provider {
 			return null;
 		}
 
-		$output = Server_Pulse_Util::shell( "ps aux --sort=-%cpu 2>/dev/null | head -n 11" );
+		// Portable column selection (works on Linux and BSD/macOS).
+		$output = Server_Pulse_Util::shell( 'ps -Ao user,pid,%cpu,%mem,command 2>/dev/null' );
+
+		if ( ! $output ) {
+			$output = Server_Pulse_Util::shell( 'ps aux 2>/dev/null' );
+		}
+
 		if ( ! $output ) {
 			return null;
 		}
 
 		$processes = array();
-		$lines     = array_filter( explode( "\n", trim( $output ) ) );
 
-		foreach ( $lines as $index => $line ) {
-			if ( 0 === $index ) {
-				continue;
-			}
+		foreach ( array_filter( explode( "\n", trim( $output ) ) ) as $line ) {
+			$columns = preg_split( '/\s+/', trim( $line ), 5 );
 
-			$columns = preg_split( '/\s+/', trim( $line ), 11 );
-			if ( count( $columns ) < 11 ) {
+			if ( ! is_array( $columns ) || count( $columns ) < 5 || ! is_numeric( $columns[1] ) ) {
 				continue;
 			}
 
@@ -311,10 +345,21 @@ class Server_Pulse_Native_Provider extends Server_Pulse_Abstract_Provider {
 				'pid'     => absint( $columns[1] ),
 				'cpu'     => round( (float) $columns[2], 1 ),
 				'memory'  => round( (float) $columns[3], 1 ),
-				'command' => sanitize_text_field( $columns[10] ),
+				'command' => sanitize_text_field( $columns[4] ),
 			);
 		}
 
-		return $processes;
+		if ( ! $processes ) {
+			return null;
+		}
+
+		usort(
+			$processes,
+			static function ( $a, $b ) {
+				return $b['cpu'] <=> $a['cpu'];
+			}
+		);
+
+		return array_slice( $processes, 0, 10 );
 	}
 }

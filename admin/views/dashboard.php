@@ -8,6 +8,17 @@
 defined( 'ABSPATH' ) || exit;
 
 $server_pulse_statuses = ( new Server_Pulse_Provider_Manager() )->statuses();
+$server_pulse_advisor  = Server_Pulse_Advisor::cached_report();
+$server_pulse_findings = is_array( $server_pulse_advisor )
+	? array_values(
+		array_filter(
+			$server_pulse_advisor['findings'],
+			static function ( $finding ) {
+				return in_array( $finding['severity'], array( 'critical', 'warning' ), true );
+			}
+		)
+	)
+	: array();
 ?>
 <div class="wrap sp-wrap">
 	<div class="sp-header">
@@ -181,6 +192,34 @@ $server_pulse_statuses = ( new Server_Pulse_Provider_Manager() )->statuses();
 				<tr><td colspan="5"><?php esc_html_e( 'No process data available on this host.', 'server-pulse' ); ?></td></tr>
 			</tbody>
 		</table>
+	</div>
+
+	<div class="sp-card sp-advisor-card">
+		<header class="sp-chart-header">
+			<h2><?php esc_html_e( 'Diagnostics', 'server-pulse' ); ?></h2>
+			<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-advisor' ) ); ?>"><?php esc_html_e( 'Open diagnostics', 'server-pulse' ); ?></a>
+		</header>
+		<?php if ( is_array( $server_pulse_advisor ) ) : ?>
+			<div class="sp-advisor-counts">
+				<a class="sp-sev is-critical sp-filter-link" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-advisor&severity=critical' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['critical'] ); ?></strong> <?php esc_html_e( 'critical', 'server-pulse' ); ?></a>
+				<a class="sp-sev is-warning sp-filter-link" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-advisor&severity=warning' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['warning'] ); ?></strong> <?php esc_html_e( 'warnings', 'server-pulse' ); ?></a>
+				<a class="sp-sev is-info sp-filter-link" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-advisor&severity=info' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['info'] ); ?></strong> <?php esc_html_e( 'info', 'server-pulse' ); ?></a>
+			</div>
+			<?php if ( $server_pulse_findings ) : ?>
+				<ul class="sp-advisor-list">
+					<?php foreach ( array_slice( $server_pulse_findings, 0, 4 ) as $server_pulse_finding ) : ?>
+						<li class="is-<?php echo esc_attr( $server_pulse_finding['severity'] ); ?>">
+							<span class="sp-sev is-<?php echo esc_attr( $server_pulse_finding['severity'] ); ?>"><?php echo esc_html( ucfirst( $server_pulse_finding['severity'] ) ); ?></span>
+							<?php echo esc_html( $server_pulse_finding['title'] ); ?>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			<?php else : ?>
+				<p class="sp-empty"><?php esc_html_e( 'No problems detected. Nice.', 'server-pulse' ); ?></p>
+			<?php endif; ?>
+		<?php else : ?>
+			<p class="sp-empty"><?php esc_html_e( 'Diagnostics run in the background; results will appear here shortly.', 'server-pulse' ); ?></p>
+		<?php endif; ?>
 	</div>
 
 	<div class="sp-card sp-alerts-card">

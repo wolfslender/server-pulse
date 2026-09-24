@@ -40,11 +40,17 @@ class Server_Pulse_Settings {
 			'enable_cpanel'      => 0,
 			'enable_wpengine'    => 0,
 			'enable_storage_scan' => 1,
+			'sentinel_enabled'   => 1,
+			'sentinel_auto_rollback' => 0,
+			'sentinel_loader'    => 0,
+			'pro_dev_mode'       => 0,
 			'cpanel_host'        => '',
 			'cpanel_user'        => '',
 			'cpanel_token'       => '',
 			'cpanel_port'        => 2083,
 			'cpanel_ssl'         => 1,
+			'cpanel_ssl_verify'  => 1,
+			'allow_private_network' => 0,
 			'wpengine_api_user'  => '',
 			'wpengine_api_pass'  => '',
 			'wpengine_account_id' => '',
@@ -139,21 +145,6 @@ class Server_Pulse_Settings {
 	}
 
 	/**
-	 * Persist settings.
-	 *
-	 * @param array $settings Raw settings.
-	 * @return array
-	 */
-	public static function update( $settings ) {
-		$sanitized = self::sanitize( $settings );
-
-		update_option( self::OPTION, $sanitized );
-		self::$cache = null;
-
-		return $sanitized;
-	}
-
-	/**
 	 * Sanitize incoming settings.
 	 *
 	 * @param array $input Raw input.
@@ -172,13 +163,13 @@ class Server_Pulse_Settings {
 		$output['retention_days']    = isset( $input['retention_days'] ) ? max( 1, min( 365, absint( $input['retention_days'] ) ) ) : $current['retention_days'];
 		$output['dashboard_refresh'] = isset( $input['dashboard_refresh'] ) ? max( 5, min( 300, absint( $input['dashboard_refresh'] ) ) ) : $current['dashboard_refresh'];
 
-		foreach ( array( 'allow_shell', 'enable_native', 'enable_wordpress', 'enable_cpanel', 'enable_wpengine', 'enable_storage_scan', 'cpanel_ssl' ) as $flag ) {
+		foreach ( array( 'allow_shell', 'enable_native', 'enable_wordpress', 'enable_cpanel', 'enable_wpengine', 'enable_storage_scan', 'cpanel_ssl', 'cpanel_ssl_verify', 'allow_private_network', 'sentinel_enabled', 'sentinel_auto_rollback', 'sentinel_loader', 'pro_dev_mode' ) as $flag ) {
 			$output[ $flag ] = ! empty( $input[ $flag ] ) ? 1 : 0;
 		}
 
 		$output['cpanel_host']  = isset( $input['cpanel_host'] ) ? sanitize_text_field( $input['cpanel_host'] ) : $current['cpanel_host'];
 		$output['cpanel_user']  = isset( $input['cpanel_user'] ) ? sanitize_text_field( $input['cpanel_user'] ) : $current['cpanel_user'];
-		$output['cpanel_port']  = isset( $input['cpanel_port'] ) ? absint( $input['cpanel_port'] ) : $current['cpanel_port'];
+		$output['cpanel_port']  = isset( $input['cpanel_port'] ) ? max( 1, min( 65535, absint( $input['cpanel_port'] ) ) ) : $current['cpanel_port'];
 
 		if ( ! empty( $input['cpanel_token'] ) && $input['cpanel_token'] !== $current['cpanel_token'] ) {
 			$output['cpanel_token'] = Server_Pulse_Crypto::encrypt( sanitize_text_field( $input['cpanel_token'] ) );
@@ -188,7 +179,11 @@ class Server_Pulse_Settings {
 		$output['wpengine_account_id'] = isset( $input['wpengine_account_id'] ) ? sanitize_text_field( $input['wpengine_account_id'] ) : $current['wpengine_account_id'];
 
 		if ( ! empty( $input['wpengine_api_pass'] ) ) {
-			$output['wpengine_api_pass'] = Server_Pulse_Crypto::encrypt( sanitize_text_field( $input['wpengine_api_pass'] ) );
+			if ( 0 !== strpos( (string) $input['wpengine_api_pass'], Server_Pulse_Crypto::PREFIX ) ) {
+				$output['wpengine_api_pass'] = Server_Pulse_Crypto::encrypt( sanitize_text_field( $input['wpengine_api_pass'] ) );
+			} else {
+				$output['wpengine_api_pass'] = $input['wpengine_api_pass'];
+			}
 		}
 
 		$thresholds = isset( $input['thresholds'] ) && is_array( $input['thresholds'] ) ? $input['thresholds'] : array();
@@ -201,7 +196,13 @@ class Server_Pulse_Settings {
 			$output['thresholds']['autoload'] = max( 0.1, min( 50, (float) $thresholds['autoload'] ) );
 		}
 
-		$output['alerts'] = self::sanitize_alerts( isset( $input['alerts'] ) ? $input['alerts'] : array(), $current['alerts'] );
+		$output['alerts'] = self::sanitize_alerts( isset( $input['alerts'] ) ? $input['alerts'] : array(), $current['alerts'], isset( $input['alerts'] ) );
+
+		// Credentials or the account may have changed: drop cached provider data.
+		delete_transient( 'server_pulse_wpengine_usage' );
+		delete_transient( Server_Pulse_Collector::CACHE_KEY );
+
+		self::$cache = null;
 
 		return $output;
 	}
@@ -211,11 +212,18 @@ class Server_Pulse_Settings {
 	 *
 	 * @param array $input   Raw alerts input.
 	 * @param array $current Current alerts config.
+	 * @param bool  $present Whether the alerts key was submitted at all.
 	 * @return array
 	 */
-	private static function sanitize_alerts( $input, $current ) {
-		$input  = is_array( $input ) ? $input : array();
+	private static function sanitize_alerts( $input, $current, $present = true ) {
 		$output = is_array( $current ) ? $current : self::defaults()['alerts'];
+
+		// A partial update that does not include alerts must not wipe them.
+		if ( ! $present ) {
+			return $output;
+		}
+
+		$input  = is_array( $input ) ? $input : array();
 
 		foreach ( array( 'enabled', 'email_enabled', 'notify_recovery', 'uptime_enabled' ) as $flag ) {
 			$output[ $flag ] = ! empty( $input[ $flag ] ) ? 1 : 0;

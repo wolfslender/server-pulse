@@ -70,6 +70,11 @@ class Server_Pulse_Alerts {
 	);
 
 	/**
+	 * Option that stores the rolling 24h notification timestamps.
+	 */
+	const NOTIFY_LOG_OPTION = 'server_pulse_notify_log';
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Server_Pulse_Collector $collector Collector.
@@ -227,9 +232,9 @@ class Server_Pulse_Alerts {
 		$projections = isset( $trends['projections'] ) && is_array( $trends['projections'] ) ? $trends['projections'] : array();
 
 		$disk = isset( $projections['disk'] ) ? $projections['disk'] : null;
-		if ( is_array( $disk ) && isset( $disk['days_left'] ) && null !== $disk['days_left'] ) {
-			$days = (int) $disk['days_left'];
-			if ( $this->rule_enabled( 'disk_projection' ) ) {
+		if ( $this->rule_enabled( 'disk_projection' ) ) {
+			if ( is_array( $disk ) && isset( $disk['days_left'] ) && null !== $disk['days_left'] ) {
+				$days      = (int) $disk['days_left'];
 				$threshold = isset( $alert_settings['disk_days_threshold'] ) ? (int) $alert_settings['disk_days_threshold'] : 7;
 
 				if ( $days <= $threshold ) {
@@ -251,8 +256,8 @@ class Server_Pulse_Alerts {
 						(float) $threshold,
 						$message,
 						array(
-							'source'   => 'projection',
-							'days'     => $days,
+							'source' => 'projection',
+							'days'   => $days,
 						)
 					);
 
@@ -260,12 +265,14 @@ class Server_Pulse_Alerts {
 				} else {
 					$this->resolve( 'disk_projection' );
 				}
+			} else {
+				$this->resolve( 'disk_projection' );
 			}
 		}
 
 		$bandwidth = isset( $projections['bandwidth'] ) ? $projections['bandwidth'] : null;
-		if ( is_array( $bandwidth ) && isset( $bandwidth['percent'] ) && null !== $bandwidth['percent'] ) {
-			if ( $this->rule_enabled( 'bandwidth_projection' ) ) {
+		if ( $this->rule_enabled( 'bandwidth_projection' ) ) {
+			if ( is_array( $bandwidth ) && isset( $bandwidth['percent'] ) && null !== $bandwidth['percent'] ) {
 				$threshold = isset( $alert_settings['bandwidth_pct_threshold'] ) ? (int) $alert_settings['bandwidth_pct_threshold'] : 85;
 				$percent   = (float) $bandwidth['percent'];
 
@@ -294,6 +301,8 @@ class Server_Pulse_Alerts {
 				} else {
 					$this->resolve( 'bandwidth_projection' );
 				}
+			} else {
+				$this->resolve( 'bandwidth_projection' );
 			}
 		}
 
@@ -315,7 +324,15 @@ class Server_Pulse_Alerts {
 			return true;
 		}
 
-		$url      = home_url( '/' );
+		$url = home_url( '/' );
+
+		/**
+		 * Filter the URL used for the local uptime check.
+		 *
+		 * @param string $url Health check URL.
+		 */
+		$url = (string) apply_filters( 'server_pulse_uptime_url', $url );
+
 		$response = wp_remote_get(
 			$url,
 			array(
@@ -340,9 +357,19 @@ class Server_Pulse_Alerts {
 		$down = ( 0 === $code ) || ( $code >= 500 );
 
 		if ( ! $down ) {
+			delete_transient( 'server_pulse_uptime_fail' );
 			$this->resolve( 'site_down' );
 
 			return true;
+		}
+
+		// Debounce: require two consecutive failed checks so a single blocked
+		// loopback request or a transient blip does not raise a false alarm.
+		$failures = (int) get_transient( 'server_pulse_uptime_fail' ) + 1;
+		set_transient( 'server_pulse_uptime_fail', $failures, 30 * MINUTE_IN_SECONDS );
+
+		if ( $failures < 2 ) {
+			return false;
 		}
 
 		$message = ( 0 === $code )
@@ -434,12 +461,13 @@ class Server_Pulse_Alerts {
 			array( '%d' )
 		);
 
-		// Send a reminder only after the cooldown has elapsed.
+		// Send a reminder only after the cooldown has elapsed. Critical alerts
+		// always go through so an escalation is never silenced by a cooldown.
 		$alert_settings = Server_Pulse_Settings::get( 'alerts', array() );
 		$cooldown       = isset( $alert_settings['cooldown_hours'] ) ? (int) $alert_settings['cooldown_hours'] : 6;
 		$last           = ! empty( $existing['last_notified'] ) ? strtotime( $existing['last_notified'] . ' UTC' ) : 0;
 
-		if ( ( time() - $last ) < ( $cooldown * HOUR_IN_SECONDS ) ) {
+		if ( 'critical' !== $severity && ( time() - $last ) < ( $cooldown * HOUR_IN_SECONDS ) ) {
 			return;
 		}
 
@@ -513,11 +541,12 @@ class Server_Pulse_Alerts {
 		}
 
 		$results = $this->notifier->dispatch( $event );
-		$sent    = ! empty( array_filter( $results ) );
 
-		if ( ! $sent ) {
+		if ( ! $this->any_sent( $results ) ) {
 			return $results;
 		}
+
+		$this->record_notification();
 
 		global $wpdb;
 
@@ -554,19 +583,81 @@ class Server_Pulse_Alerts {
 			return true;
 		}
 
-		global $wpdb;
+		return $this->recent_notification_count() < $cap;
+	}
 
-		$since = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+	/**
+	 * Whether at least one channel actually delivered the event.
+	 *
+	 * A WP_Error is an object and therefore always truthy, so it must be
+	 * filtered out explicitly: a failed channel is not a delivery.
+	 *
+	 * @param array $results Map of channel id to bool|WP_Error.
+	 * @return bool
+	 */
+	private function any_sent( array $results ) {
+		foreach ( $results as $result ) {
+			if ( is_wp_error( $result ) ) {
+				continue;
+			}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COALESCE(SUM(notify_count), 0) FROM {$this->table()} WHERE last_notified >= %s",
-				$since
-			)
-		);
+			if ( true === $result || ( ! is_wp_error( $result ) && $result ) ) {
+				return true;
+			}
+		}
 
-		return $count < $cap;
+		return false;
+	}
+
+	/**
+	 * Number of notifications sent in the last 24 hours.
+	 *
+	 * @return int
+	 */
+	private function recent_notification_count() {
+		return count( $this->notification_log() );
+	}
+
+	/**
+	 * Record that a notification was sent now.
+	 *
+	 * @return void
+	 */
+	private function record_notification() {
+		$log   = $this->notification_log();
+		$log[] = time();
+
+		update_option( self::NOTIFY_LOG_OPTION, $log, false );
+	}
+
+	/**
+	 * Timestamps of notifications sent in the last 24 hours.
+	 *
+	 * @return int[]
+	 */
+	private function notification_log() {
+		$log = get_option( self::NOTIFY_LOG_OPTION, array() );
+
+		if ( ! is_array( $log ) ) {
+			$log = array();
+		}
+
+		$cutoff = time() - DAY_IN_SECONDS;
+		$recent = array();
+
+		foreach ( $log as $timestamp ) {
+			$timestamp = (int) $timestamp;
+
+			if ( $timestamp >= $cutoff ) {
+				$recent[] = $timestamp;
+			}
+		}
+
+		if ( count( $recent ) !== count( $log ) ) {
+			update_option( self::NOTIFY_LOG_OPTION, $recent, false );
+		}
+
+		return $recent;
 	}
 
 	/**
@@ -637,6 +728,32 @@ class Server_Pulse_Alerts {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table()} WHERE status = 'active'" );
+	}
+
+	/**
+	 * Delete resolved alerts older than the retention window.
+	 *
+	 * Active alerts are never pruned.
+	 *
+	 * @param int $days Retention in days.
+	 * @return int Rows deleted.
+	 */
+	public function prune( $days = 90 ) {
+		$days = max( 7, absint( $days ) );
+
+		global $wpdb;
+
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $days * DAY_IN_SECONDS ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$this->table()} WHERE status = 'resolved' AND updated_at < %s",
+				$cutoff
+			)
+		);
+
+		return max( 0, (int) $deleted );
 	}
 
 	/**

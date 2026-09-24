@@ -41,23 +41,34 @@ class Server_Pulse_Ajax {
 	private $trends;
 
 	/**
+	 * Diagnostics advisor.
+	 *
+	 * @var Server_Pulse_Advisor
+	 */
+	private $advisor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Server_Pulse_Collector  $collector  Collector.
 	 * @param Server_Pulse_Repository $repository Repository.
 	 * @param Server_Pulse_Alerts     $alerts     Alert engine.
 	 * @param Server_Pulse_Trends     $trends     Trend analysis.
+	 * @param Server_Pulse_Advisor    $advisor    Diagnostics advisor.
 	 */
-	public function __construct( Server_Pulse_Collector $collector, Server_Pulse_Repository $repository, Server_Pulse_Alerts $alerts, Server_Pulse_Trends $trends ) {
+	public function __construct( Server_Pulse_Collector $collector, Server_Pulse_Repository $repository, Server_Pulse_Alerts $alerts, Server_Pulse_Trends $trends, Server_Pulse_Advisor $advisor ) {
 		$this->collector  = $collector;
 		$this->repository = $repository;
 		$this->alerts     = $alerts;
 		$this->trends     = $trends;
+		$this->advisor    = $advisor;
 
 		add_action( 'wp_ajax_server_pulse_get_snapshot', array( $this, 'get_snapshot' ) );
 		add_action( 'wp_ajax_server_pulse_get_history', array( $this, 'get_history' ) );
 		add_action( 'wp_ajax_server_pulse_get_alerts', array( $this, 'get_alerts' ) );
 		add_action( 'wp_ajax_server_pulse_get_trends', array( $this, 'get_trends' ) );
+		add_action( 'wp_ajax_server_pulse_get_advisor', array( $this, 'get_advisor' ) );
+		add_action( 'wp_ajax_server_pulse_run_fix', array( $this, 'run_fix' ) );
 		add_action( 'wp_ajax_server_pulse_send_test_alert', array( $this, 'send_test_alert' ) );
 		add_action( 'wp_ajax_server_pulse_test_connection', array( $this, 'test_connection' ) );
 		add_action( 'wp_ajax_server_pulse_sample_now', array( $this, 'sample_now' ) );
@@ -75,6 +86,27 @@ class Server_Pulse_Ajax {
 		}
 
 		check_ajax_referer( 'server_pulse_nonce', 'nonce' );
+	}
+
+	/**
+	 * Throttle a costly action per user.
+	 *
+	 * @param string $key     Action key.
+	 * @param int    $seconds Window in seconds.
+	 * @return void
+	 */
+	private function throttle( $key, $seconds = 5 ) {
+		$user = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+		$name = 'sp_rl_' . $key . '_' . $user;
+
+		if ( false !== get_transient( $name ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Please wait a moment before running that again.', 'server-pulse' ) ),
+				429
+			);
+		}
+
+		set_transient( $name, 1, max( 1, (int) $seconds ) );
 	}
 
 	/**
@@ -145,12 +177,54 @@ class Server_Pulse_Ajax {
 	}
 
 	/**
+	 * Run (or return cached) diagnostics.
+	 *
+	 * @return void
+	 */
+	public function get_advisor() {
+		$this->guard();
+
+		$force = isset( $_POST['force'] ) && 'true' === sanitize_text_field( wp_unslash( $_POST['force'] ) );
+
+		if ( $force ) {
+			$this->throttle( 'advisor', 5 );
+		}
+
+		$snapshot = $this->collector->get_snapshot( false );
+		$summary  = isset( $snapshot['summary'] ) ? $snapshot['summary'] : array();
+
+		wp_send_json_success( $this->advisor->report( $force, $summary ) );
+	}
+
+	/**
+	 * Run a maintenance action suggested by the advisor.
+	 *
+	 * @return void
+	 */
+	public function run_fix() {
+		$this->guard();
+		$this->throttle( 'fix', 5 );
+
+		$action = isset( $_POST['fix'] ) ? sanitize_key( wp_unslash( $_POST['fix'] ) ) : '';
+		$result = Server_Pulse_Maintenance::run( $action );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		Server_Pulse_Advisor::flush();
+
+		wp_send_json_success( $result );
+	}
+
+	/**
 	 * Send a test notification through every enabled channel.
 	 *
 	 * @return void
 	 */
 	public function send_test_alert() {
 		$this->guard();
+		$this->throttle( 'test_alert', 10 );
 
 		$results = $this->alerts->send_test();
 		$sent    = array();
@@ -227,6 +301,7 @@ class Server_Pulse_Ajax {
 	 */
 	public function sample_now() {
 		$this->guard();
+		$this->throttle( 'sample', 5 );
 
 		$written = $this->collector->sample_now();
 
@@ -249,6 +324,7 @@ class Server_Pulse_Ajax {
 	 */
 	public function scan_storage() {
 		$this->guard();
+		$this->throttle( 'scan', 30 );
 
 		if ( ! (int) Server_Pulse_Settings::get( 'enable_storage_scan', 1 ) ) {
 			wp_send_json_error( array( 'message' => __( 'Local storage scan is disabled in settings.', 'server-pulse' ) ) );

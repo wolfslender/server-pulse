@@ -37,7 +37,7 @@ class Server_Pulse_WordPress_Provider extends Server_Pulse_Abstract_Provider {
 	 * @inheritDoc
 	 */
 	public function is_available() {
-		return true;
+		return (bool) Server_Pulse_Settings::get( 'enable_wordpress', 1 );
 	}
 
 	/**
@@ -107,7 +107,7 @@ class Server_Pulse_WordPress_Provider extends Server_Pulse_Abstract_Provider {
 		$metrics['db_tables'] = (int) $wpdb->get_var( 'SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema = DATABASE()' );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$autoload = $wpdb->get_var( "SELECT SUM(LENGTH(option_value)) FROM {$wpdb->options} WHERE autoload IN ('yes','on','auto')" );
+		$autoload = $wpdb->get_var( "SELECT SUM(LENGTH(option_value)) FROM {$wpdb->options} WHERE autoload IN ('yes','on','auto','auto-on')" );
 		$metrics['db_autoload'] = ( null === $autoload ) ? null : (int) $autoload;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -161,10 +161,22 @@ class Server_Pulse_WordPress_Provider extends Server_Pulse_Abstract_Provider {
 	private function content_metrics() {
 		$posts = wp_count_posts( 'post' );
 		$pages = wp_count_posts( 'page' );
-		$users = count_users();
 
-		if ( ! function_exists( 'get_plugins' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$totals = get_transient( 'server_pulse_wp_totals' );
+
+		if ( ! is_array( $totals ) ) {
+			$users = count_users();
+
+			if ( ! function_exists( 'get_plugins' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			}
+
+			$totals = array(
+				'users'          => isset( $users['total_users'] ) ? (int) $users['total_users'] : 0,
+				'plugins_total'  => count( get_plugins() ),
+			);
+
+			set_transient( 'server_pulse_wp_totals', $totals, HOUR_IN_SECONDS );
 		}
 
 		$active_plugins = (array) get_option( 'active_plugins', array() );
@@ -173,9 +185,9 @@ class Server_Pulse_WordPress_Provider extends Server_Pulse_Abstract_Provider {
 			'posts'          => $posts ? (int) $posts->publish : 0,
 			'pages'          => $pages ? (int) $pages->publish : 0,
 			'comments'       => (int) wp_count_comments()->approved,
-			'users'          => isset( $users['total_users'] ) ? (int) $users['total_users'] : 0,
+			'users'          => isset( $totals['users'] ) ? (int) $totals['users'] : 0,
 			'plugins_active' => count( $active_plugins ),
-			'plugins_total'  => count( get_plugins() ),
+			'plugins_total'  => isset( $totals['plugins_total'] ) ? (int) $totals['plugins_total'] : 0,
 		);
 	}
 

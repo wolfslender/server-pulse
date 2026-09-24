@@ -21,6 +21,7 @@ class Server_Pulse_Activator {
 		self::create_tables();
 		self::set_defaults();
 		self::schedule_cron();
+		self::sync_loader();
 
 		update_option( 'server_pulse_db_version', SERVER_PULSE_DB_VERSION );
 	}
@@ -32,12 +33,23 @@ class Server_Pulse_Activator {
 	 */
 	public static function upgrade() {
 		self::create_tables();
-
-		if ( ! wp_next_scheduled( 'server_pulse_alert_event' ) ) {
-			wp_schedule_event( time() + 300, 'server_pulse_five_minutes', 'server_pulse_alert_event' );
-		}
+		self::sync_loader();
+		self::schedule_cron();
 
 		update_option( 'server_pulse_db_version', SERVER_PULSE_DB_VERSION );
+	}
+
+	/**
+	 * Install the early loader when the setting is on.
+	 *
+	 * @return void
+	 */
+	private static function sync_loader() {
+		if ( ! class_exists( 'Server_Pulse_Loader' ) ) {
+			return;
+		}
+
+		Server_Pulse_Loader::sync( (bool) Server_Pulse_Settings::get( 'sentinel_loader', 0 ) );
 	}
 
 	/**
@@ -85,6 +97,7 @@ class Server_Pulse_Activator {
 			PRIMARY KEY  (id),
 			KEY rule_status (rule_key, status),
 			KEY created_at (created_at),
+			KEY last_notified (last_notified),
 			KEY status (status)
 		) {$charset_collate};";
 
@@ -113,20 +126,10 @@ class Server_Pulse_Activator {
 	 * @return void
 	 */
 	private static function schedule_cron() {
-		if ( ! wp_next_scheduled( 'server_pulse_sample_event' ) ) {
-			wp_schedule_event( time() + 60, 'hourly', 'server_pulse_sample_event' );
+		if ( ! class_exists( 'Server_Pulse_Cron' ) ) {
+			return;
 		}
 
-		if ( ! wp_next_scheduled( 'server_pulse_cleanup_event' ) ) {
-			wp_schedule_event( time() + 300, 'daily', 'server_pulse_cleanup_event' );
-		}
-
-		if ( ! wp_next_scheduled( 'server_pulse_alert_event' ) ) {
-			wp_schedule_event( time() + 300, 'server_pulse_five_minutes', 'server_pulse_alert_event' );
-		}
-
-		if ( ! wp_next_scheduled( Server_Pulse_Storage_Scanner::EVENT ) ) {
-			wp_schedule_event( time() + 600, 'daily', Server_Pulse_Storage_Scanner::EVENT );
-		}
+		Server_Pulse_Cron::schedule_events();
 	}
 }

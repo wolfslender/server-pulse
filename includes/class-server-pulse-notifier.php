@@ -283,12 +283,14 @@ class Server_Pulse_Notifier {
 
 		$response = wp_remote_post(
 			$telegram,
-			array(
-				'timeout' => 15,
-				'body'    => array(
-					'chat_id' => $chat,
-					'text'    => $event['subject'] . "\n" . $event['message'],
-				),
+			Server_Pulse_Network::request_args(
+				array(
+					'timeout' => 15,
+					'body'    => array(
+						'chat_id' => $chat,
+						'text'    => $event['subject'] . "\n" . $event['message'],
+					),
+				)
 			)
 		);
 
@@ -307,12 +309,19 @@ class Server_Pulse_Notifier {
 			return new WP_Error( 'server_pulse_missing_url', __( 'The channel URL is empty.', 'server-pulse' ) );
 		}
 
+		$safe = Server_Pulse_Network::validate_url( $url );
+		if ( is_wp_error( $safe ) ) {
+			return $safe;
+		}
+
 		$response = wp_remote_post(
 			$url,
-			array(
-				'timeout' => 15,
-				'headers' => array( 'Content-Type' => 'application/json' ),
-				'body'    => wp_json_encode( $body ),
+			Server_Pulse_Network::request_args(
+				array(
+					'timeout' => 15,
+					'headers' => array( 'Content-Type' => 'application/json' ),
+					'body'    => wp_json_encode( $body ),
+				)
 			)
 		);
 

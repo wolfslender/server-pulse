@@ -23,15 +23,26 @@ class Server_Pulse_Util {
 			return (int) $value;
 		}
 
-		$value = trim( (string) $value );
+		$value = strtolower( trim( (string) $value ) );
 		if ( '' === $value ) {
 			return 0;
 		}
 
-		$unit   = strtolower( substr( $value, -1 ) );
+		// Accept both "1M" and "1MB" style units.
+		if ( 'b' === substr( $value, -1 ) && 'b' !== substr( $value, -2, 1 ) ) {
+			$value = substr( $value, 0, -1 );
+		}
+
+		$unit   = substr( $value, -1 );
 		$number = (float) $value;
 
 		switch ( $unit ) {
+			case 'p':
+				$number *= 1024;
+				// no break.
+			case 't':
+				$number *= 1024;
+				// no break.
 			case 'g':
 				$number *= 1024;
 				// no break.
@@ -157,11 +168,12 @@ class Server_Pulse_Util {
 		}
 
 		$host = isset( $_SERVER['HTTP_HOST'] ) ? strtolower( sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) ) : '';
+		$host = preg_replace( '/:\d+$/', '', $host );
 
-		$patterns = array( 'wpengine.com', 'wpenginepowered.com', 'wpeengine.com' );
+		$patterns = array( 'wpengine.com', 'wpenginepowered.com' );
 
 		foreach ( $patterns as $pattern ) {
-			if ( false !== strpos( $host, $pattern ) ) {
+			if ( $host === $pattern || substr( $host, - ( strlen( $pattern ) + 1 ) ) === '.' . $pattern ) {
 				return true;
 			}
 		}
@@ -183,7 +195,9 @@ class Server_Pulse_Util {
 			return true;
 		}
 
-		return is_dir( getenv( 'HOME' ) . '/.cpanel' );
+		$home = getenv( 'HOME' );
+
+		return ( is_string( $home ) && '' !== $home ) ? is_dir( $home . '/.cpanel' ) : false;
 	}
 
 	/**
@@ -193,7 +207,7 @@ class Server_Pulse_Util {
 	 * @return string|null
 	 */
 	public static function shell( $command ) {
-		if ( ! self::has_function( 'shell_exec' ) || ! self::has_function( 'escapeshellcmd' ) ) {
+		if ( ! self::has_function( 'shell_exec' ) ) {
 			return null;
 		}
 

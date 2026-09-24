@@ -102,9 +102,16 @@ class Server_Pulse_Provider_Manager {
 	private function is_detected( $id ) {
 		switch ( $id ) {
 			case 'wpengine':
-				return Server_Pulse_Util::is_wpengine();
 			case 'cpanel':
-				return Server_Pulse_Util::is_cpanel();
+				$detected = Server_Pulse_Host_Detector::detect();
+
+				foreach ( (array) ( isset( $detected['matches'] ) ? $detected['matches'] : array() ) as $match ) {
+					if ( isset( $match['id'] ) && $id === $match['id'] ) {
+						return true;
+					}
+				}
+
+				return false;
 			case 'native':
 				return (bool) Server_Pulse_Util::has_function( 'sys_getloadavg' ) || is_readable( '/proc/meminfo' );
 			case 'wordpress':

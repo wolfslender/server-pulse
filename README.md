@@ -1,7 +1,7 @@
 # Server Pulse
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.0.1-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.6.0-brightgreen.svg)](CHANGELOG.md)
 
 Real-time server and WordPress health monitoring for any host. Automatically detects the
 environment and pulls metrics from the best available source: the native operating system,
@@ -32,11 +32,17 @@ from WP Engine on WPE, while CPU/RAM come from the native system on a VPS.
 
 - Live dashboard with auto refresh, health score and grade.
 - Historical charts (24h / 7d / 30d) persisted in `{prefix}sp_samples`.
-- Alert thresholds for CPU, memory, disk, autoloaded options and overdue cron.
+- Alert engine with thresholds, trends, capacity projections, de-duplication, cooldowns and a
+  daily cap; email plus Pro webhook/Slack/Discord/Telegram channels.
+- **Diagnostics advisor** with read-only checks and one-click safe fixes, plus hosting
+  environment detection (managed hosts, control panels and cloud platforms).
+- **Crash sentinel** that detects plugin activations that killed PHP (502 / OOM / timeout),
+  offers one-click rollback and can install an optional mu-plugin early loader.
 - **Local storage scan** for hosts without a hosting API: walks `wp-content` and breaks down
   uploads, plugins, themes, mu-plugins and other, daily via cron and on demand.
 - **Step-by-step provider diagnostics** for WP Engine and cPanel connections.
-- Credentials encrypted at rest with WordPress salts + OpenSSL (idempotent encryption).
+- Credentials encrypted at rest with AES-256-GCM and a per-install secret (legacy formats
+  still decrypt).
 - REST API (`/wp-json/server-pulse/v1/snapshot`, `/history`) guarded by `manage_options`.
 - No phone-home. No CDN assets. Charts are hand-rolled SVG.
 
@@ -77,11 +83,16 @@ The codebase is a small provider pattern:
 server-pulse.php                        Bootstrap + autoloader
 includes/
   class-server-pulse-plugin.php         Main controller
-  class-server-pulse-*.php              Settings, crypto, repository, health, collector,
-                                        admin, ajax, cron, rest, storage scanner, util
+  class-server-pulse-*.php              Settings, crypto, network, repository, health,
+                                        collector, alerts, notifier, trends, advisor,
+                                        maintenance, host detector, sentinel, loader,
+                                        dashboard, admin, ajax, cron, rest, storage
+                                        scanner, license, util
   providers/                            Native, cPanel, WP Engine, WordPress
-admin/views/                            Dashboard and settings screens
-assets/                                 admin.css, charts.js, dashboard.js, settings.js
+admin/views/                            Dashboard, settings, alerts and diagnostics screens
+assets/                                 admin.css, charts.js, dashboard.js, settings.js,
+                                        advisor.js
+mu-plugin/                              Optional early crash loader template
 ```
 
 Every provider implements `Server_Pulse_Provider_Interface` and returns a normalized snapshot.

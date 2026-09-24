@@ -62,6 +62,13 @@ final class Server_Pulse_Plugin {
 	public $trends;
 
 	/**
+	 * Diagnostics advisor.
+	 *
+	 * @var Server_Pulse_Advisor
+	 */
+	public $advisor;
+
+	/**
 	 * Retrieve the singleton instance.
 	 *
 	 * @return Server_Pulse_Plugin
@@ -84,14 +91,17 @@ final class Server_Pulse_Plugin {
 		$this->notifier   = new Server_Pulse_Notifier();
 		$this->alerts     = new Server_Pulse_Alerts( $this->collector, $this->notifier );
 		$this->trends     = new Server_Pulse_Trends( $this->repository );
+		$this->advisor    = new Server_Pulse_Advisor();
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
-		add_action( 'init', array( $this, 'register_rest' ) );
+		add_action( 'rest_api_init', array( $this, 'register_rest' ) );
 		add_action( 'plugins_loaded', array( $this, 'maybe_upgrade' ), 20 );
 
 		new Server_Pulse_Admin();
-		new Server_Pulse_Ajax( $this->collector, $this->repository, $this->alerts, $this->trends );
-		new Server_Pulse_Cron( $this->collector, $this->repository, $this->alerts, $this->trends );
+		new Server_Pulse_Ajax( $this->collector, $this->repository, $this->alerts, $this->trends, $this->advisor );
+		new Server_Pulse_Cron( $this->collector, $this->repository, $this->alerts, $this->trends, $this->advisor );
+		new Server_Pulse_Dashboard();
+		new Server_Pulse_Sentinel();
 	}
 
 	/**

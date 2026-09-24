@@ -62,8 +62,8 @@ class Server_Pulse_Cpanel_Provider extends Server_Pulse_Abstract_Provider {
 				}
 
 				$id    = strtolower( (string) $entry['id'] );
-				$limit = isset( $entry['limit'] ) && is_numeric( $entry['limit'] ) ? (int) $entry['limit'] : null;
-				$used  = isset( $entry['usage'] ) && is_numeric( $entry['usage'] ) ? (int) $entry['usage'] : null;
+				$limit = isset( $entry['limit'] ) && is_numeric( $entry['limit'] ) ? $this->mb_to_bytes( (float) $entry['limit'] ) : null;
+				$used  = isset( $entry['usage'] ) && is_numeric( $entry['usage'] ) ? $this->mb_to_bytes( (float) $entry['usage'] ) : null;
 
 				if ( false !== strpos( $id, 'disk' ) && null !== $used ) {
 					$metrics['disk_used']  = $used;
@@ -74,7 +74,7 @@ class Server_Pulse_Cpanel_Provider extends Server_Pulse_Abstract_Provider {
 				} elseif ( false !== strpos( $id, 'mysql' ) && null !== $used ) {
 					$metrics['db_size'] = $used;
 				} elseif ( false !== strpos( $id, 'email' ) && null !== $used ) {
-					$metrics['email_accounts'] = $used;
+					$metrics['email_accounts'] = isset( $entry['usage'] ) ? (int) $entry['usage'] : null;
 				}
 			}
 		}
@@ -115,6 +115,19 @@ class Server_Pulse_Cpanel_Provider extends Server_Pulse_Abstract_Provider {
 	}
 
 	/**
+	 * Convert a cPanel UAPI megabyte value to bytes.
+	 *
+	 * The UAPI ResourceUsage endpoints report disk, bandwidth and database
+	 * sizes in megabytes; the rest of the plugin stores bytes.
+	 *
+	 * @param float $megabytes Value in MB.
+	 * @return int
+	 */
+	private function mb_to_bytes( $megabytes ) {
+		return (int) round( $megabytes * MB_IN_BYTES );
+	}
+
+	/**
 	 * Perform a cPanel UAPI call.
 	 *
 	 * @param string $module   UAPI module.
@@ -135,19 +148,35 @@ class Server_Pulse_Cpanel_Provider extends Server_Pulse_Abstract_Provider {
 			return new WP_Error( 'server_pulse_cpanel_config', __( 'cPanel host, user and token are required.', 'server-pulse' ) );
 		}
 
-		$scheme = (int) Server_Pulse_Settings::get( 'cpanel_ssl' ) ? 'https' : 'http';
-		$port   = absint( Server_Pulse_Settings::get( 'cpanel_port', 2083 ) );
-		$url    = sprintf( '%s://%s:%d/execute/%s/%s', $scheme, $host, $port, rawurlencode( $module ), rawurlencode( $function ) );
+		$ssl    = (int) Server_Pulse_Settings::get( 'cpanel_ssl' );
+		$scheme = $ssl ? 'https' : 'http';
+		$port   = absint( Server_Pulse_Settings::get( 'cpanel_port', 0 ) );
+
+		if ( $port <= 0 ) {
+			$port = $ssl ? 2083 : 2082;
+		} elseif ( ! $ssl && 2083 === $port ) {
+			// The stored value is the SSL default but SSL is turned off.
+			$port = 2082;
+		}
+
+		$url = sprintf( '%s://%s:%d/execute/%s/%s', $scheme, $host, $port, rawurlencode( $module ), rawurlencode( $function ) );
+
+		$safe = Server_Pulse_Network::validate_url( $url );
+		if ( is_wp_error( $safe ) ) {
+			return $safe;
+		}
 
 		$response = wp_remote_get(
 			$url,
-			array(
-				'timeout'   => 15,
-				'sslverify' => false,
-				'headers'   => array(
-					'Authorization' => 'cpanel ' . $user . ':' . $token,
-					'Accept'        => 'application/json',
-				),
+			Server_Pulse_Network::request_args(
+				array(
+					'timeout'   => 15,
+					'sslverify' => (bool) Server_Pulse_Settings::get( 'cpanel_ssl_verify', 1 ),
+					'headers'   => array(
+						'Authorization' => 'cpanel ' . $user . ':' . $token,
+						'Accept'        => 'application/json',
+					),
+				)
 			)
 		);
 
