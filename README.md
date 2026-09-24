@@ -1,7 +1,7 @@
 # Server Pulse
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.6.0-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.7.0-brightgreen.svg)](CHANGELOG.md)
 
 Real-time server and WordPress health monitoring for any host. Automatically detects the
 environment and pulls metrics from the best available source: the native operating system,
@@ -40,6 +40,9 @@ from WP Engine on WPE, while CPU/RAM come from the native system on a VPS.
   offers one-click rollback and can install an optional mu-plugin early loader.
 - **Local storage scan** for hosts without a hosting API: walks `wp-content` and breaks down
   uploads, plugins, themes, mu-plugins and other, daily via cron and on demand.
+- **Traffic & logs (Pro)**: parses WP Engine / Apache access and error logs into 5xx/504
+  spike analysis, abusive IPs and empty-User-Agent bots, missing-asset 404 hot spots, heavy
+  endpoints and recurring PHP errors, with copy-paste edge rules and a downloadable report.
 - **Step-by-step provider diagnostics** for WP Engine and cPanel connections.
 - Credentials encrypted at rest with AES-256-GCM and a per-install secret (legacy formats
   still decrypt).
@@ -50,8 +53,8 @@ from WP Engine on WPE, while CPU/RAM come from the native system on a VPS.
 
 1. Copy the folder into `wp-content/plugins/` (the folder should be named `server-pulse`).
 2. Activate **Server Pulse**.
-3. Open the **Server Pulse** menu.
-4. Configure providers under **Server Pulse → Settings**.
+3. Open **Tools → Server Pulse**.
+4. Configure providers under **Tools → Server Pulse → Settings**.
 
 ## WP Engine setup
 
@@ -63,7 +66,7 @@ results in `HTTP 200` with an empty account list, and the plugin cannot read any
 2. Go to **Users → API Access** (`my.wpengine.com/profile/api_access`).
 3. Turn **API access ON** for the account (toggle next to the account name).
 4. Click **Generate Credentials** and copy the API User ID and API Password.
-5. Paste them in **Server Pulse → Settings → WP Engine** and save.
+5. Paste them in **Tools → Server Pulse → Settings → WP Engine** and save.
 6. Open the dashboard and click **Test connection** to see the full diagnostic.
 
 If `/accounts` returns `count: 0` with valid credentials, the account's API access is off or
@@ -72,7 +75,7 @@ the user lacks account access — contact WP Engine support for an ownership cha
 ## cPanel setup
 
 1. In cPanel, open **Security → Manage API Tokens** and create a token.
-2. Enter the host, username and token in **Server Pulse → Settings → cPanel**.
+2. Enter the host, username and token in **Tools → Server Pulse → Settings → cPanel**.
 3. Save and test the connection.
 
 ## Development
@@ -89,11 +92,16 @@ includes/
                                         dashboard, admin, ajax, cron, rest, storage
                                         scanner, license, util
   providers/                            Native, cPanel, WP Engine, WordPress
-admin/views/                            Dashboard, settings, alerts and diagnostics screens
+  pro/                                  Pro modules (traffic & log analyzers, reports)
+admin/views/                            Dashboard, settings, alerts, diagnostics and
+                                        traffic screens
 assets/                                 admin.css, charts.js, dashboard.js, settings.js,
-                                        advisor.js
+                                        advisor.js, traffic.js
 mu-plugin/                              Optional early crash loader template
 ```
+
+Pro features are grouped under `includes/pro/` so they can be moved into a separate
+extension later without touching the free plugin.
 
 Every provider implements `Server_Pulse_Provider_Interface` and returns a normalized snapshot.
 

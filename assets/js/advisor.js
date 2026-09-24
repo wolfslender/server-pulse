@@ -45,6 +45,58 @@
 		return SEVERITY_LABELS[severity] || severity;
 	}
 
+	function allFindings() {
+		return (report && Array.isArray(report.findings)) ? report.findings : [];
+	}
+
+	function filtersActive() {
+		return !!(state.severity || state.category);
+	}
+
+	function countBySeverity(findings) {
+		var counts = { critical: 0, warning: 0, info: 0, good: 0 };
+
+		findings.forEach(function (finding) {
+			var severity = finding.severity || 'info';
+			if (Object.prototype.hasOwnProperty.call(counts, severity)) {
+				counts[severity]++;
+			}
+		});
+
+		return counts;
+	}
+
+	function countByCategory(findings) {
+		var counts = {};
+
+		findings.forEach(function (finding) {
+			var category = finding.category || 'other';
+			counts[category] = (counts[category] || 0) + 1;
+		});
+
+		return counts;
+	}
+
+	// Findings that match the active filters, but ignoring one dimension so
+	// the counts shown on the other dimension stay consistent with the list.
+	function scopedFindings(ignore) {
+		return allFindings().filter(function (finding) {
+			if ('severity' !== ignore && state.severity && finding.severity !== state.severity) {
+				return false;
+			}
+			if ('category' !== ignore && state.category && finding.category !== state.category) {
+				return false;
+			}
+			return true;
+		});
+	}
+
+	function renderAll() {
+		renderSummary();
+		renderCategoryChips();
+		renderList();
+	}
+
 	function renderFinding(finding) {
 		var severity = finding.severity || 'info';
 		var html = '<div class="sp-finding is-' + escapeHtml(severity) + '">';
@@ -82,17 +134,7 @@
 	}
 
 	function visibleFindings() {
-		var findings = (report && report.findings) || [];
-
-		return findings.filter(function (finding) {
-			if (state.severity && finding.severity !== state.severity) {
-				return false;
-			}
-			if (state.category && finding.category !== state.category) {
-				return false;
-			}
-			return true;
-		});
+		return scopedFindings( '' );
 	}
 
 	function renderList() {
@@ -104,7 +146,8 @@
 		var findings = visibleFindings();
 
 		if (!findings.length) {
-			container.innerHTML = '<p class="sp-empty">' + escapeHtml(config.i18n.empty) + '</p>';
+			var message = filtersActive() ? config.i18n.emptyFiltered : config.i18n.empty;
+			container.innerHTML = '<p class="sp-empty">' + escapeHtml(message) + '</p>';
 			return;
 		}
 
@@ -148,18 +191,13 @@
 			return;
 		}
 
-		var findings = (report && report.findings) || [];
-		var counts = {};
-		findings.forEach(function (finding) {
-			var category = finding.category || 'other';
-			counts[category] = (counts[category] || 0) + 1;
-		});
+		var counts = countByCategory( scopedFindings( 'category' ) );
 
 		var order = CATEGORY_ORDER.filter(function (category) {
 			return counts[category];
 		});
 		Object.keys(counts).forEach(function (category) {
-			if (order.indexOf(category) === -1) {
+			if (order.indexOf(category) === -1 && counts[category]) {
 				order.push(category);
 			}
 		});
@@ -179,22 +217,35 @@
 				'</span></button>';
 		});
 
+		if (filtersActive()) {
+			html += '<button type="button" class="sp-chip sp-clear-filters" id="sp-advisor-clear">' + escapeHtml(config.i18n.clearFilters) + '</button>';
+		}
+
 		container.innerHTML = html;
 
 		Array.prototype.forEach.call(container.querySelectorAll('.sp-cat-chip'), function (chip) {
 			chip.addEventListener('click', function () {
 				state.category = chip.getAttribute('data-category') || '';
-				renderCategoryChips();
-				renderList();
+				renderAll();
 			});
 		});
+
+		var clear = $('sp-advisor-clear');
+		if (clear) {
+			clear.addEventListener('click', function () {
+				state.severity = '';
+				state.category = '';
+				renderAll();
+			});
+		}
 	}
 
 	function renderSummary() {
-		var counts = (report && report.counts) || {};
-		setText('sp-advisor-critical', counts.critical || 0);
-		setText('sp-advisor-warning', counts.warning || 0);
-		setText('sp-advisor-info', counts.info || 0);
+		var counts = countBySeverity( scopedFindings( 'severity' ) );
+
+		setText('sp-advisor-critical', counts.critical);
+		setText('sp-advisor-warning', counts.warning);
+		setText('sp-advisor-info', counts.info);
 		setText('sp-advisor-host', (report && report.host && report.host.label) || '—');
 
 		Array.prototype.forEach.call(document.querySelectorAll('#sp-advisor-summary .sp-filter'), function (chip) {
@@ -204,9 +255,7 @@
 
 	function render(data) {
 		report = data || { findings: [] };
-		renderSummary();
-		renderCategoryChips();
-		renderList();
+		renderAll();
 	}
 
 	function bindSeverityFilters() {
@@ -214,8 +263,7 @@
 			chip.addEventListener('click', function () {
 				var severity = chip.getAttribute('data-severity') || '';
 				state.severity = state.severity === severity ? '' : severity;
-				renderSummary();
-				renderList();
+				renderAll();
 			});
 		});
 	}
@@ -312,12 +360,14 @@
 
 	document.addEventListener('DOMContentLoaded', function () {
 		var params = new URLSearchParams(window.location.search);
+		var severity = params.get('severity');
+		var category = params.get('category');
 
-		if (params.get('severity')) {
-			state.severity = params.get('severity');
+		if (severity && Object.prototype.hasOwnProperty.call(SEVERITY_LABELS, severity)) {
+			state.severity = severity;
 		}
-		if (params.get('category')) {
-			state.category = params.get('category');
+		if (category && CATEGORY_ORDER.indexOf(category) !== -1) {
+			state.category = category;
 		}
 
 		bind();

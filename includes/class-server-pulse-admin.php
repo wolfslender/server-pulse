@@ -13,32 +13,18 @@ defined( 'ABSPATH' ) || exit;
 class Server_Pulse_Admin {
 
 	/**
-	 * Dashboard page hook.
+	 * The single Server Pulse page hook (all tabs share one screen).
 	 *
 	 * @var string
 	 */
-	private $dashboard_hook = '';
+	private $page_hook = '';
 
 	/**
-	 * Settings page hook.
+	 * Valid tabs keyed by slug.
 	 *
-	 * @var string
+	 * @var string[]
 	 */
-	private $settings_hook = '';
-
-	/**
-	 * Alerts page hook.
-	 *
-	 * @var string
-	 */
-	private $alerts_hook = '';
-
-	/**
-	 * Diagnostics page hook.
-	 *
-	 * @var string
-	 */
-	private $advisor_hook = '';
+	private static $tabs = array( 'dashboard', 'settings', 'alerts', 'diagnostics', 'traffic' );
 
 	/**
 	 * Constructor.
@@ -50,6 +36,7 @@ class Server_Pulse_Admin {
 		add_filter( 'plugin_action_links_' . SERVER_PULSE_BASENAME, array( $this, 'action_links' ) );
 		add_action( 'update_option_' . Server_Pulse_Settings::OPTION, array( $this, 'reschedule_cron' ), 10, 0 );
 		add_action( 'update_option_' . Server_Pulse_Settings::OPTION, array( $this, 'sync_loader' ), 10, 0 );
+		add_action( 'admin_post_server_pulse_export_traffic', array( $this, 'export_traffic' ) );
 	}
 
 	/**
@@ -58,42 +45,80 @@ class Server_Pulse_Admin {
 	 * @return void
 	 */
 	public function register_menu() {
-		$this->dashboard_hook = add_menu_page(
+		$this->page_hook = add_submenu_page(
+			'tools.php',
 			__( 'Server Pulse', 'server-pulse' ),
 			__( 'Server Pulse', 'server-pulse' ),
 			'manage_options',
 			'server-pulse',
-			array( $this, 'render_dashboard' ),
-			'dashicons-performance',
-			90
+			array( $this, 'render_page' )
+		);
+	}
+
+	/**
+	 * Current tab slug.
+	 *
+	 * @return string
+	 */
+	private function current_tab() {
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		return in_array( $tab, self::$tabs, true ) ? $tab : 'dashboard';
+	}
+
+	/**
+	 * Render the single Server Pulse screen, routed by the tab parameter.
+	 *
+	 * @return void
+	 */
+	public function render_page() {
+		switch ( $this->current_tab() ) {
+			case 'settings':
+				$this->render_settings();
+				break;
+			case 'alerts':
+				$this->render_alerts();
+				break;
+			case 'diagnostics':
+				$this->render_advisor();
+				break;
+			case 'traffic':
+				$this->render_traffic();
+				break;
+			default:
+				$this->render_dashboard();
+		}
+	}
+
+	/**
+	 * Print the tab navigation shared by every screen.
+	 *
+	 * @param string $active Active tab slug.
+	 * @return void
+	 */
+	public static function render_tabs( $active ) {
+		$labels = array(
+			'dashboard'   => __( 'Dashboard', 'server-pulse' ),
+			'settings'    => __( 'Settings', 'server-pulse' ),
+			'alerts'      => __( 'Alerts', 'server-pulse' ),
+			'diagnostics' => __( 'Diagnostics', 'server-pulse' ),
+			'traffic'     => __( 'Traffic & logs', 'server-pulse' ),
 		);
 
-		$this->settings_hook = add_submenu_page(
-			'server-pulse',
-			__( 'Server Pulse Settings', 'server-pulse' ),
-			__( 'Settings', 'server-pulse' ),
-			'manage_options',
-			'server-pulse-settings',
-			array( $this, 'render_settings' )
-		);
+		echo '<nav class="nav-tab-wrapper sp-tabs">';
 
-		$this->alerts_hook = add_submenu_page(
-			'server-pulse',
-			__( 'Server Pulse Alerts', 'server-pulse' ),
-			__( 'Alerts', 'server-pulse' ),
-			'manage_options',
-			'server-pulse-alerts',
-			array( $this, 'render_alerts' )
-		);
+		foreach ( $labels as $slug => $label ) {
+			$url = admin_url( 'tools.php?page=server-pulse&tab=' . $slug );
 
-		$this->advisor_hook = add_submenu_page(
-			'server-pulse',
-			__( 'Server Pulse Diagnostics', 'server-pulse' ),
-			__( 'Diagnostics', 'server-pulse' ),
-			'manage_options',
-			'server-pulse-advisor',
-			array( $this, 'render_advisor' )
-		);
+			printf(
+				'<a href="%s" class="nav-tab%s">%s</a>',
+				esc_url( $url ),
+				$active === $slug ? ' nav-tab-active' : '',
+				esc_html( $label )
+			);
+		}
+
+		echo '</nav>';
 	}
 
 	/**
@@ -120,7 +145,7 @@ class Server_Pulse_Admin {
 	 * @return array
 	 */
 	public function action_links( $links ) {
-		$url = admin_url( 'admin.php?page=server-pulse-settings' );
+		$url = admin_url( 'tools.php?page=server-pulse&tab=settings' );
 
 		array_unshift(
 			$links,
@@ -138,7 +163,7 @@ class Server_Pulse_Admin {
 	 */
 	public function enqueue( $hook ) {
 		$is_widget = ( 'index.php' === $hook );
-		$is_page   = in_array( $hook, array( $this->dashboard_hook, $this->settings_hook, $this->alerts_hook, $this->advisor_hook ), true );
+		$is_page   = ( $hook === $this->page_hook );
 
 		if ( ! $is_page && ! $is_widget ) {
 			return;
@@ -155,7 +180,7 @@ class Server_Pulse_Admin {
 			return;
 		}
 
-		if ( $hook === $this->advisor_hook ) {
+		if ( 'diagnostics' === $this->current_tab() ) {
 			wp_enqueue_script(
 				'server-pulse-advisor',
 				SERVER_PULSE_URL . 'assets/js/advisor.js',
@@ -176,6 +201,8 @@ class Server_Pulse_Admin {
 						'error'      => __( 'Request failed.', 'server-pulse' ),
 						'confirm'    => __( 'Run this fix now?', 'server-pulse' ),
 						'empty'      => __( 'No findings yet.', 'server-pulse' ),
+						'emptyFiltered' => __( 'No findings match the active filters.', 'server-pulse' ),
+						'clearFilters'  => __( 'Clear filters', 'server-pulse' ),
 						'applyFix'   => __( 'Apply fix', 'server-pulse' ),
 						'all'        => __( 'All', 'server-pulse' ),
 						'categories' => array(
@@ -199,7 +226,7 @@ class Server_Pulse_Admin {
 			return;
 		}
 
-		if ( $hook === $this->settings_hook || $hook === $this->alerts_hook ) {
+		if ( in_array( $this->current_tab(), array( 'settings', 'alerts' ), true ) ) {
 			wp_enqueue_script(
 				'server-pulse-settings',
 				SERVER_PULSE_URL . 'assets/js/settings.js',
@@ -229,7 +256,69 @@ class Server_Pulse_Admin {
 			return;
 		}
 
-		if ( $hook !== $this->dashboard_hook ) {
+		if ( 'traffic' === $this->current_tab() ) {
+			wp_enqueue_script(
+				'server-pulse-traffic',
+				SERVER_PULSE_URL . 'assets/js/traffic.js',
+				array(),
+				SERVER_PULSE_VERSION,
+				true
+			);
+
+			wp_localize_script(
+				'server-pulse-traffic',
+				'serverPulseTraffic',
+				array(
+					'ajaxurl'   => admin_url( 'admin-ajax.php' ),
+					'nonce'     => wp_create_nonce( 'server_pulse_nonce' ),
+					'isPro'     => Server_Pulse_License::is_pro(),
+					'exportUrl' => wp_nonce_url( admin_url( 'admin-post.php?action=server_pulse_export_traffic' ), 'server_pulse_export_traffic' ),
+					'i18n'      => array(
+						'running'    => __( 'Analyzing logs… this can take a few seconds.', 'server-pulse' ),
+						'error'      => __( 'Request failed.', 'server-pulse' ),
+						'noFile'     => __( 'Choose a log file first.', 'server-pulse' ),
+						'confirmClear' => __( 'Delete the stored reports?', 'server-pulse' ),
+						'cleared'    => __( 'Stored reports cleared.', 'server-pulse' ),
+						'copied'     => __( 'Copied to clipboard.', 'server-pulse' ),
+						'emptyState' => __( 'No report yet. Analyze the WP Engine logs or upload a log export.', 'server-pulse' ),
+						'requests'   => __( 'Requests', 'server-pulse' ),
+						'emptyUa'    => __( 'Empty UA', 'server-pulse' ),
+						'thIp'       => __( 'IP', 'server-pulse' ),
+						'thReq'      => __( 'Requests', 'server-pulse' ),
+						'th5xx'      => __( '5xx', 'server-pulse' ),
+						'thEmptyUa'  => __( 'Empty UA', 'server-pulse' ),
+						'thMinute'   => __( 'Minute', 'server-pulse' ),
+						'thPath'     => __( 'Path', 'server-pulse' ),
+						'thCount'    => __( 'Count', 'server-pulse' ),
+						'thSuggestion' => __( 'Suggestion', 'server-pulse' ),
+						'thSeverity' => __( 'Severity', 'server-pulse' ),
+						'thLocation' => __( 'Location', 'server-pulse' ),
+						'thMessage'  => __( 'Message', 'server-pulse' ),
+						'missingAssets' => __( 'Top missing assets (404)', 'server-pulse' ),
+						'heavyEndpoints' => __( 'Heavy endpoints', 'server-pulse' ),
+						'thWhatToDo' => __( 'What to do', 'server-pulse' ),
+						'thSearchFor' => __( 'Search for', 'server-pulse' ),
+						'howToLook'  => __( 'Where to look: Plugins → Plugin File Editor, or over SSH run grep -rn "snippet" wp-content. The snippet below is what registers or handles the endpoint.', 'server-pulse' ),
+						'heavyHelp'  => array(
+							'rest'    => __( 'Custom REST route registered by a theme or plugin. If it runs on every page view, cache it (transient/object cache) and add edge caching with the right Vary header.', 'server-pulse' ),
+							'ajax'    => __( 'admin-ajax.php request. Find which action is being called (the plugin below) and disable the feature you do not need, or cache the response.', 'server-pulse' ),
+							'cron'    => __( 'WP-Cron is being triggered by web requests. Add define( \'DISABLE_WP_CRON\', true ); to wp-config.php and rely on the host cron.', 'server-pulse' ),
+							'login'   => __( 'Login page hit by bots. Rate limit or block it at the edge and enable two-factor authentication.', 'server-pulse' ),
+							'xmlrpc'  => __( 'XML-RPC endpoint. Disable it if unused (add_filter( \'xmlrpc_enabled\', \'__return_false\' )) or block it at the edge.', 'server-pulse' ),
+							'php'     => __( 'A PHP endpoint served by a plugin or theme. Review what handles this path.', 'server-pulse' ),
+							'generic' => __( 'Cache or short-circuit this dynamic endpoint.', 'server-pulse' ),
+						),
+						'busiestMinutes' => __( 'Busiest minutes', 'server-pulse' ),
+						'phpErrors'  => __( 'Top PHP errors', 'server-pulse' ),
+						'byDay'      => __( '5xx per day', 'server-pulse' ),
+						'day'        => __( 'Day', 'server-pulse' ),
+						'actions'    => __( 'Recommended actions', 'server-pulse' ),
+						'generated'  => __( 'Generated', 'server-pulse' ),
+						'capped'     => __( 'Analysis stopped early at the size/time limit; results are partial.', 'server-pulse' ),
+					),
+				)
+			);
+
 			return;
 		}
 
@@ -394,6 +483,63 @@ class Server_Pulse_Admin {
 		$report   = server_pulse()->advisor->report( false, $summary );
 
 		include SERVER_PULSE_DIR . 'admin/views/advisor.php';
+	}
+
+	/**
+	 * Render the Pro traffic & logs view.
+	 *
+	 * @return void
+	 */
+	public function render_traffic() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'server-pulse' ) );
+		}
+
+		$is_pro = Server_Pulse_License::is_pro();
+
+		$traffic = $is_pro ? Server_Pulse_Traffic_Analyzer::report() : array();
+		$errors  = $is_pro ? Server_Pulse_Log_Analyzer::report() : array();
+		$recs    = $is_pro ? Server_Pulse_Traffic_Report::recommendations( $traffic ) : array( 'rules' => array(), 'text' => '' );
+
+		$wpe_available = $is_pro && (bool) Server_Pulse_Traffic_Analyzer::discover_log_files();
+
+		$export_url = wp_nonce_url( admin_url( 'admin-post.php?action=server_pulse_export_traffic' ), 'server_pulse_export_traffic' );
+
+		include SERVER_PULSE_DIR . 'admin/views/traffic.php';
+	}
+
+	/**
+	 * Export the traffic + error report as a standalone HTML download (Pro).
+	 *
+	 * @return void
+	 */
+	public function export_traffic() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do that.', 'server-pulse' ) );
+		}
+
+		check_admin_referer( 'server_pulse_export_traffic' );
+
+		if ( ! Server_Pulse_License::is_pro() ) {
+			wp_die( esc_html__( 'This is a Pro feature.', 'server-pulse' ) );
+		}
+
+		$traffic = Server_Pulse_Traffic_Analyzer::report();
+		$errors  = Server_Pulse_Log_Analyzer::report();
+
+		if ( ! $traffic ) {
+			wp_die( esc_html__( 'Run an analysis first.', 'server-pulse' ) );
+		}
+
+		$html = Server_Pulse_Traffic_Report::html( $traffic, $errors );
+		$file = 'server-pulse-traffic-' . gmdate( 'Ymd-His' ) . '.html';
+
+		nocache_headers();
+		header( 'Content-Type: text/html; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="' . $file . '"' );
+
+		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fully escaped by the report builder.
+		exit;
 	}
 
 	/**

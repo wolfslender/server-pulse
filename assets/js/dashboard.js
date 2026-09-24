@@ -486,7 +486,7 @@
 		}
 
 		var notes = [];
-		var settingsUrl = 'admin.php?page=server-pulse-settings';
+		var settingsUrl = 'tools.php?page=server-pulse&tab=settings';
 
 		(config.statuses || []).forEach(function (status) {
 			var provider = data.providers ? data.providers[status.id] : null;

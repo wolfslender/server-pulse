@@ -20,6 +20,7 @@ foreach ( $history as $row ) {
 }
 ?>
 <div class="wrap sp-wrap">
+	<?php Server_Pulse_Admin::render_tabs( 'alerts' ); ?>
 	<div class="sp-header">
 		<div class="sp-brand">
 			<span class="dashicons dashicons-warning"></span>
@@ -30,7 +31,7 @@ foreach ( $history as $row ) {
 		</div>
 		<div class="sp-header-actions">
 			<button type="button" class="button button-primary sp-test-alert"><?php esc_html_e( 'Send test alert', 'server-pulse' ); ?></button>
-			<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-settings' ) ); ?>"><?php esc_html_e( 'Configure alerts', 'server-pulse' ); ?></a>
+			<a class="button" href="<?php echo esc_url( admin_url( 'tools.php?page=server-pulse&tab=settings' ) ); ?>"><?php esc_html_e( 'Configure alerts', 'server-pulse' ); ?></a>
 		</div>
 	</div>
 

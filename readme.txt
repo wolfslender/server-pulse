@@ -4,7 +4,7 @@ Tags: server, monitoring, health, wp engine, cpanel
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 3.6.0
+Stable tag: 3.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,6 +36,7 @@ Server Pulse gives you a single dashboard for the health of your server and your
 * One-click safe fixes: expired transients, post revisions and debug.log.
 * Crash sentinel: catches plugin activations that 502 / run out of memory and rolls them back.
 * Optional early loader that recovers sites where the crashed plugin fatal-errors on every load.
+* Pro: Traffic & logs analyzer that turns WP Engine/Apache access and error logs into 5xx/504 spikes, abusive clients, missing assets and PHP-error digests, with ready-to-paste edge rules.
 * WordPress dashboard widget for crash alerts and at-risk plugins.
 * Security: SSRF guard on outbound requests, verified TLS for cPanel, signed crash markers and AES-256-GCM credential encryption.
 * Hosting environment detection across managed hosts, control panels and cloud platforms.
@@ -51,8 +52,8 @@ WP Engine is a managed platform on a shared cluster. It does not expose per-acco
 
 1. Upload the `server-pulse` folder to `/wp-content/plugins/` or install it from the Plugins screen.
 2. Activate the plugin.
-3. Open **Server Pulse** in the admin menu.
-4. (Optional) Go to **Server Pulse → Settings** to configure providers, thresholds and sampling.
+3. Open **Tools → Server Pulse**.
+4. (Optional) Go to **Tools → Server Pulse → Settings** to configure providers, thresholds and sampling.
 
 == Frequently Asked Questions ==
 
@@ -75,7 +76,14 @@ In a custom table named `{prefix}sp_samples`. It is removed on uninstall.
 
 == Changelog ==
 
+= 3.7.0 =
+* Added (Pro): Traffic & logs analysis. Reads WP Engine / Apache access and error logs (auto-detected on the server or uploaded) and reports 5xx/504 spikes, abusive IPs and empty-User-Agent bots, missing-asset 404 hot spots, heavy endpoints and recurring PHP errors, with copy-paste edge rules and a downloadable HTML report.
+* Added (Pro): traffic findings in the Diagnostics advisor.
+* Changed: new Traffic & logs tab under Tools → Server Pulse.
+* Security: analysis endpoints require capability, nonce and Pro; uploads are read in memory and never stored; log discovery is confined to the WP Engine private roots.
+
 = 3.6.0 =
+* Changed: the admin UI is a single Tools → Server Pulse screen with Dashboard, Settings, Alerts and Diagnostics tabs.
 * Security: outbound URL guard against SSRF (blocks private/loopback/metadata addresses) for webhooks and cPanel, with an opt-in for private networks.
 * Security: cPanel TLS verification is now configurable and on by default.
 * Security: the crash marker is HMAC-signed; the sentinel and early loader ignore tampered markers.

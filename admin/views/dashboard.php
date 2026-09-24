@@ -21,6 +21,7 @@ $server_pulse_findings = is_array( $server_pulse_advisor )
 	: array();
 ?>
 <div class="wrap sp-wrap">
+	<?php Server_Pulse_Admin::render_tabs( 'dashboard' ); ?>
 	<div class="sp-header">
 		<div class="sp-brand">
 			<span class="dashicons dashicons-performance"></span>
@@ -197,13 +198,13 @@ $server_pulse_findings = is_array( $server_pulse_advisor )
 	<div class="sp-card sp-advisor-card">
 		<header class="sp-chart-header">
 			<h2><?php esc_html_e( 'Diagnostics', 'server-pulse' ); ?></h2>
-			<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-advisor' ) ); ?>"><?php esc_html_e( 'Open diagnostics', 'server-pulse' ); ?></a>
+			<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'tools.php?page=server-pulse&tab=diagnostics' ) ); ?>"><?php esc_html_e( 'Open diagnostics', 'server-pulse' ); ?></a>
 		</header>
 		<?php if ( is_array( $server_pulse_advisor ) ) : ?>
 			<div class="sp-advisor-counts">
-				<a class="sp-sev is-critical sp-filter-link" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-advisor&severity=critical' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['critical'] ); ?></strong> <?php esc_html_e( 'critical', 'server-pulse' ); ?></a>
-				<a class="sp-sev is-warning sp-filter-link" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-advisor&severity=warning' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['warning'] ); ?></strong> <?php esc_html_e( 'warnings', 'server-pulse' ); ?></a>
-				<a class="sp-sev is-info sp-filter-link" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-advisor&severity=info' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['info'] ); ?></strong> <?php esc_html_e( 'info', 'server-pulse' ); ?></a>
+				<a class="sp-sev is-critical sp-filter-link" href="<?php echo esc_url( admin_url( 'tools.php?page=server-pulse&tab=diagnostics&severity=critical' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['critical'] ); ?></strong> <?php esc_html_e( 'critical', 'server-pulse' ); ?></a>
+				<a class="sp-sev is-warning sp-filter-link" href="<?php echo esc_url( admin_url( 'tools.php?page=server-pulse&tab=diagnostics&severity=warning' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['warning'] ); ?></strong> <?php esc_html_e( 'warnings', 'server-pulse' ); ?></a>
+				<a class="sp-sev is-info sp-filter-link" href="<?php echo esc_url( admin_url( 'tools.php?page=server-pulse&tab=diagnostics&severity=info' ) ); ?>"><strong><?php echo esc_html( $server_pulse_advisor['counts']['info'] ); ?></strong> <?php esc_html_e( 'info', 'server-pulse' ); ?></a>
 			</div>
 			<?php if ( $server_pulse_findings ) : ?>
 				<ul class="sp-advisor-list">
@@ -225,7 +226,7 @@ $server_pulse_findings = is_array( $server_pulse_advisor )
 	<div class="sp-card sp-alerts-card">
 		<header class="sp-chart-header">
 			<h2><?php esc_html_e( 'Alerts', 'server-pulse' ); ?></h2>
-			<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'admin.php?page=server-pulse-alerts' ) ); ?>"><?php esc_html_e( 'Alert log', 'server-pulse' ); ?></a>
+			<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'tools.php?page=server-pulse&tab=alerts' ) ); ?>"><?php esc_html_e( 'Alert log', 'server-pulse' ); ?></a>
 		</header>
 		<div id="sp-alerts">
 			<p class="sp-empty"><?php esc_html_e( 'No alerts. Everything looks healthy.', 'server-pulse' ); ?></p>

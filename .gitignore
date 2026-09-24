@@ -9,5 +9,9 @@ Thumbs.db
 .idea/
 .vscode/
 
+# WP Engine private environment data (logs, config with secrets)
+_wpeprivate/
+*.log.gz
+
 # Build artifacts
 *.zip

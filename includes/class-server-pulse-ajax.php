@@ -73,6 +73,29 @@ class Server_Pulse_Ajax {
 		add_action( 'wp_ajax_server_pulse_test_connection', array( $this, 'test_connection' ) );
 		add_action( 'wp_ajax_server_pulse_sample_now', array( $this, 'sample_now' ) );
 		add_action( 'wp_ajax_server_pulse_scan_storage', array( $this, 'scan_storage' ) );
+		add_action( 'wp_ajax_server_pulse_traffic_analyze', array( $this, 'traffic_analyze' ) );
+		add_action( 'wp_ajax_server_pulse_traffic_get', array( $this, 'traffic_get' ) );
+		add_action( 'wp_ajax_server_pulse_traffic_clear', array( $this, 'traffic_clear' ) );
+	}
+
+	/**
+	 * Whether the current install has the Pro features unlocked.
+	 *
+	 * @return bool
+	 */
+	private function is_pro() {
+		return Server_Pulse_License::is_pro();
+	}
+
+	/**
+	 * Abort the request when the Pro add-on is not unlocked.
+	 *
+	 * @return void
+	 */
+	private function require_pro() {
+		if ( ! $this->is_pro() ) {
+			wp_send_json_error( array( 'message' => __( 'This is a Pro feature.', 'server-pulse' ) ), 403 );
+		}
 	}
 
 	/**
@@ -345,6 +368,141 @@ class Server_Pulse_Ajax {
 					$data['duration']
 				),
 			)
+		);
+	}
+
+	/**
+	 * Analyze access/error logs and store the resulting report (Pro).
+	 *
+	 * Sources:
+	 * - "wpe": autodetect the WP Engine private logs on this server.
+	 * - "upload": analyze an uploaded .log / .log.gz / .txt file.
+	 *
+	 * The uploaded file is read straight from the request temp path and is
+	 * never moved, stored or served. Only bounded aggregates are persisted.
+	 *
+	 * @return void
+	 */
+	public function traffic_analyze() {
+		$this->guard();
+		$this->require_pro();
+		$this->throttle( 'traffic', 15 );
+
+		$source = isset( $_POST['source'] ) ? sanitize_key( wp_unslash( $_POST['source'] ) ) : 'upload';
+
+		if ( 'wpe' === $source ) {
+			$traffic = Server_Pulse_Traffic_Analyzer::analyze_wpe_logs();
+			$errors  = Server_Pulse_Log_Analyzer::analyze_wpe_logs();
+
+			if ( is_wp_error( $traffic ) ) {
+				wp_send_json_error( array( 'message' => $traffic->get_error_message() ) );
+			}
+		} else {
+			$file = $this->validated_upload();
+
+			if ( is_wp_error( $file ) ) {
+				wp_send_json_error( array( 'message' => $file->get_error_message() ) );
+			}
+
+			$traffic = Server_Pulse_Traffic_Analyzer::analyze_files( array( $file['path'] ), 'upload' );
+			if ( is_wp_error( $traffic ) ) {
+				wp_send_json_error( array( 'message' => $traffic->get_error_message() ) );
+			}
+
+			$errors = Server_Pulse_Log_Analyzer::analyze_files( array( $file['path'] ) );
+			if ( is_wp_error( $errors ) ) {
+				$errors = array();
+			}
+		}
+
+		Server_Pulse_Advisor::flush();
+
+		wp_send_json_success(
+			array(
+				'traffic'         => $traffic,
+				'errors'          => is_array( $errors ) ? $errors : array(),
+				'recommendations' => Server_Pulse_Traffic_Report::recommendations( is_array( $traffic ) ? $traffic : array() ),
+			)
+		);
+	}
+
+	/**
+	 * Return the stored traffic and error reports (Pro).
+	 *
+	 * @return void
+	 */
+	public function traffic_get() {
+		$this->guard();
+		$this->require_pro();
+
+		$traffic = Server_Pulse_Traffic_Analyzer::report();
+		$errors  = Server_Pulse_Log_Analyzer::report();
+
+		wp_send_json_success(
+			array(
+				'traffic'         => $traffic,
+				'errors'          => $errors,
+				'recommendations' => Server_Pulse_Traffic_Report::recommendations( $traffic ),
+			)
+		);
+	}
+
+	/**
+	 * Delete the stored traffic and error reports (Pro).
+	 *
+	 * @return void
+	 */
+	public function traffic_clear() {
+		$this->guard();
+		$this->require_pro();
+
+		Server_Pulse_Traffic_Analyzer::clear();
+		Server_Pulse_Log_Analyzer::clear();
+		Server_Pulse_Advisor::flush();
+
+		wp_send_json_success( array( 'message' => __( 'Stored reports cleared.', 'server-pulse' ) ) );
+	}
+
+	/**
+	 * Validate an uploaded log file without ever storing it.
+	 *
+	 * @return array|WP_Error { path:string, name:string, size:int }
+	 */
+	private function validated_upload() {
+		if ( empty( $_FILES['logfile'] ) || ! isset( $_FILES['logfile']['tmp_name'] ) ) {
+			return new WP_Error( 'server_pulse_no_upload', __( 'No log file was uploaded.', 'server-pulse' ) );
+		}
+
+		$file = $_FILES['logfile']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- path is validated below.
+
+		$tmp  = isset( $file['tmp_name'] ) ? (string) $file['tmp_name'] : '';
+		$name = isset( $file['name'] ) ? sanitize_file_name( (string) $file['name'] ) : '';
+
+		if ( '' === $tmp || ! is_uploaded_file( $tmp ) ) {
+			return new WP_Error( 'server_pulse_bad_upload', __( 'The upload could not be verified.', 'server-pulse' ) );
+		}
+
+		$allowed = array( 'log', 'txt', 'gz', 'out' );
+		$ext     = strtolower( (string) pathinfo( $name, PATHINFO_EXTENSION ) );
+
+		if ( ! in_array( $ext, $allowed, true ) ) {
+			return new WP_Error( 'server_pulse_bad_ext', __( 'Only .log, .txt and .log.gz files are accepted.', 'server-pulse' ) );
+		}
+
+		$size = (int) @filesize( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+
+		if ( $size <= 0 ) {
+			return new WP_Error( 'server_pulse_empty_upload', __( 'The uploaded file is empty.', 'server-pulse' ) );
+		}
+
+		if ( $size > Server_Pulse_Traffic_Analyzer::MAX_BYTES ) {
+			return new WP_Error( 'server_pulse_big_upload', __( 'The uploaded file is larger than the analysis limit (300 MB).', 'server-pulse' ) );
+		}
+
+		return array(
+			'path' => $tmp,
+			'name' => $name,
+			'size' => $size,
 		);
 	}
 }

@@ -12,6 +12,8 @@ $settings = isset( $settings ) ? $settings : Server_Pulse_Settings::all();
 $statuses = isset( $statuses ) ? $statuses : array();
 ?>
 <div class="wrap sp-wrap">
+	<?php Server_Pulse_Admin::render_tabs( 'settings' ); ?>
+	<?php settings_errors(); ?>
 	<div class="sp-header">
 		<div class="sp-brand">
 			<span class="dashicons dashicons-performance"></span>

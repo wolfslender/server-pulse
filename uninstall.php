@@ -26,6 +26,8 @@ $server_pulse_clean_site = static function () {
 		'server_pulse_storage_scan',
 		'server_pulse_notify_log',
 		'server_pulse_crypto_secret',
+		'server_pulse_traffic_report',
+		'server_pulse_error_report',
 	);
 
 	foreach ( $options as $option ) {

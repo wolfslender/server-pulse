@@ -572,7 +572,7 @@ class Server_Pulse_Sentinel {
 			'server_pulse_sentinel_dismiss'
 		);
 
-		$diagnostics = admin_url( 'admin.php?page=server-pulse-advisor' );
+		$diagnostics = admin_url( 'tools.php?page=server-pulse&tab=diagnostics' );
 		$hint        = $this->memory_hint( $crash );
 
 		?>

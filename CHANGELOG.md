@@ -2,7 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## [3.7.0] - 2026-09-24
+
+### Added
+- **Traffic & logs (Pro)**: analyze WP Engine / Apache access and error logs into actionable insight, without sending anything off the server.
+  - Access-log analyzer: request/minute spikes, 5xx and 504 counts by day, top offending IPs (with empty-User-Agent and 5xx attribution), busiest minutes, top paths, missing-asset 404 hot spots and heavy dynamic endpoints.
+  - Error-log analyzer: recurring PHP warnings/notices/fatals grouped by file:line with counts and first/last seen.
+  - Automatic recommendations: copy-paste edge rules (block empty User-Agent, rate limit offender IPs, short-circuit missing assets, cache heavy endpoints) and a downloadable standalone HTML report.
+  - Sources: auto-detected `_wpeprivate` logs on the server, or an uploaded `.log` / `.log.gz` file read in memory and never stored.
+  - New Pro findings surfaced in the Diagnostics advisor (5xx spikes, empty-UA abuse, missing assets, PHP noise/fatals).
+- The analyzer streaming engine is hard-capped (300 MB / 3M lines / 25 s, bounded unique keys) so a hostile or huge log cannot exhaust memory or time.
+
+### Changed
+- New admin UI lives under the single **Tools → Server Pulse** screen, now with a **Traffic & logs** tab (Pro).
+
+### Security
+- Traffic analysis endpoints enforce capability, nonce and the Pro license; uploads are validated (`is_uploaded_file`, extension allowlist, size cap) and are never moved, stored or served. Log discovery is confined to real paths inside the WP Engine private roots.
+
 ## [3.6.0] - 2026-09-23
+
+### Changed
+- The admin UI now lives under a single **Tools → Server Pulse** screen with **Dashboard, Settings, Alerts and Diagnostics** tabs, instead of a top-level menu, per the WordPress.org guidelines.
+- Buttons and chips were restyled with rounded corners, a floating elevation and a modern cyan→indigo→fuchsia gradient with a light sweep on hover for primary actions.
 
 ### Fixed
 - Fresh activations now schedule the 5-minute uptime check: the custom interval is registered before scheduling, so site-down alerts work on new installs.
@@ -15,6 +36,7 @@ All notable changes to this project are documented here.
 - Credentials fall back to an HMAC-authenticated keystream (instead of reversible base64) when OpenSSL is missing; the encryption and sentinel HMAC keys mix in a per-install random secret, and the CBC fallback is authenticated.
 - "Delete revisions" now keeps the newest revisions per post and respects `WP_POST_REVISIONS`; transient cleanup also removes site/network transients.
 - The sentinel no longer raises a false crash for slow activations (fixed window widened) and the uptime check requires two consecutive failures before alerting.
+- The Diagnostics advisor category and severity counts now respect the active filters, so a category count can no longer show findings that the filtered list would hide; added a "Clear filters" control.
 - Resolved alerts are pruned with the retention window and the alerts table indexes `last_notified`.
 
 ### Security

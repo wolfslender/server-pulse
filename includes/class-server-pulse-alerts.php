@@ -825,7 +825,7 @@ class Server_Pulse_Alerts {
 			'subject'     => $subject,
 			'site_name'   => $this->site_name(),
 			'site_url'    => home_url( '/' ),
-			'admin_url'   => admin_url( 'admin.php?page=server-pulse' ),
+			'admin_url'   => admin_url( 'tools.php?page=server-pulse' ),
 			'occurred_at' => time(),
 		);
 	}

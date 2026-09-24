@@ -43,7 +43,7 @@ class Server_Pulse_Dashboard {
 		$report  = Server_Pulse_Advisor::cached_report();
 		$risky   = Server_Pulse_Advisor::at_risk_plugins();
 
-		$diagnostics = admin_url( 'admin.php?page=server-pulse-advisor' );
+		$diagnostics = admin_url( 'tools.php?page=server-pulse&tab=diagnostics' );
 		$plugins_url = admin_url( 'plugins.php' );
 
 		// 1. Crashes.
@@ -95,6 +95,6 @@ class Server_Pulse_Dashboard {
 		echo '</div>';
 
 		// 3. Footer.
-		echo '<p class="sp-dash-footer"><a href="' . esc_url( admin_url( 'admin.php?page=server-pulse' ) ) . '">' . esc_html__( 'Open Server Pulse', 'server-pulse' ) . '</a></p>';
+		echo '<p class="sp-dash-footer"><a href="' . esc_url( admin_url( 'tools.php?page=server-pulse' ) ) . '">' . esc_html__( 'Open Server Pulse', 'server-pulse' ) . '</a></p>';
 	}
 }

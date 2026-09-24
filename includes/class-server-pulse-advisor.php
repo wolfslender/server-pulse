@@ -63,6 +63,10 @@ class Server_Pulse_Advisor {
 			$this->storage_checks( $summary )
 		);
 
+		if ( Server_Pulse_License::is_pro() ) {
+			$findings = array_merge( $findings, $this->traffic_checks() );
+		}
+
 		usort( $findings, array( $this, 'compare' ) );
 
 		$report = array(
@@ -678,6 +682,178 @@ class Server_Pulse_Advisor {
 				__( 'Review uploads, plugins and themes for anything you no longer need.', 'server-pulse' ),
 				(int) $summary['storage_scan_total']
 			);
+		}
+
+		return $findings;
+	}
+
+	/**
+	 * Pro: findings derived from the stored traffic and error reports.
+	 *
+	 * These only appear after the admin has analyzed logs, so they never add
+	 * work to a normal page load. They are gated behind the Pro license by the
+	 * caller.
+	 *
+	 * @return array
+	 */
+	private function traffic_checks() {
+		$findings = array();
+
+		$traffic = class_exists( 'Server_Pulse_Traffic_Analyzer' ) ? Server_Pulse_Traffic_Analyzer::report() : array();
+		$errors  = class_exists( 'Server_Pulse_Log_Analyzer' ) ? Server_Pulse_Log_Analyzer::report() : array();
+
+		if ( $traffic ) {
+			$status = isset( $traffic['status'] ) ? (array) $traffic['status'] : array();
+			$five   = isset( $status['5xx'] ) ? (int) $status['5xx'] : 0;
+			$peak   = 0;
+			$peak_minute = '';
+
+			foreach ( (array) ( isset( $traffic['top_minutes'] ) ? $traffic['top_minutes'] : array() ) as $row ) {
+				if ( isset( $row['five_xx'] ) && (int) $row['five_xx'] > $peak ) {
+					$peak = (int) $row['five_xx'];
+					$peak_minute = isset( $row['minute'] ) ? $row['minute'] : '';
+				}
+			}
+
+			if ( $peak >= 50 ) {
+				$findings[] = $this->finding(
+					'traffic_spike',
+					'performance',
+					$peak >= 150 ? 'critical' : 'warning',
+					sprintf(
+						/* translators: %d: number of 5xx responses. */
+						__( 'Traffic spike: %d server errors in a single minute', 'server-pulse' ),
+						$peak
+					),
+					__( 'Automated traffic saturated the PHP workers, so normal requests timed out. This is what causes the 504s.', 'server-pulse' ),
+					__( 'Review the Traffic & logs tab: block the offending IPs/User-Agents and cache the heavy endpoints.', 'server-pulse' ),
+					$peak,
+					array( 'minute' => $peak_minute )
+				);
+			}
+
+			if ( ! empty( $traffic['empty_ua'] ) && (int) $traffic['empty_ua'] >= 50 ) {
+				$findings[] = $this->finding(
+					'traffic_empty_ua',
+					'security',
+					'warning',
+					sprintf(
+						/* translators: %d: count. */
+						__( '%d requests with an empty User-Agent', 'server-pulse' ),
+						(int) $traffic['empty_ua']
+					),
+					__( 'Real browsers always send a User-Agent. Empty-UA traffic is usually a scanner or a bot.', 'server-pulse' ),
+					__( 'Add a WP Engine web rule to block requests with an empty User-Agent.', 'server-pulse' ),
+					(int) $traffic['empty_ua']
+				);
+			}
+
+			$missing = 0;
+			foreach ( (array) ( isset( $traffic['missing_assets'] ) ? $traffic['missing_assets'] : array() ) as $row ) {
+				$missing += isset( $row['requests'] ) ? (int) $row['requests'] : 0;
+			}
+			if ( $missing >= 500 ) {
+				$findings[] = $this->finding(
+					'traffic_missing_assets',
+					'performance',
+					'warning',
+					sprintf(
+						/* translators: %d: count. */
+						__( '%d requests hit missing files (404)', 'server-pulse' ),
+						$missing
+					),
+					__( 'Every missing file still boots WordPress and consumes a PHP worker. Favicons and the passkey endpoint are common offenders.', 'server-pulse' ),
+					__( 'Serve the missing files or return an instant 404 at the edge. See the Traffic & logs tab.', 'server-pulse' ),
+					$missing
+				);
+			}
+
+			$heavy = ( isset( $traffic['heavy_endpoints'] ) && is_array( $traffic['heavy_endpoints'] ) ) ? $traffic['heavy_endpoints'] : array();
+			if ( ! empty( $heavy[0]['requests'] ) && (int) $heavy[0]['requests'] >= 500 ) {
+				$top    = $heavy[0];
+				$detail = '';
+
+				if ( class_exists( 'Server_Pulse_Traffic_Report' ) ) {
+					$detail = Server_Pulse_Traffic_Report::endpoint_advice( $top );
+				}
+
+				if ( ! empty( $top['search'] ) ) {
+					$detail .= ' ' . sprintf(
+						/* translators: %s: code snippet to search for. */
+						__( 'Search for: %s', 'server-pulse' ),
+						$top['search']
+					);
+				}
+
+				$findings[] = $this->finding(
+					'traffic_heavy_endpoints',
+					'performance',
+					'warning',
+					sprintf(
+						/* translators: %s: request path. */
+						__( 'High-volume endpoint: %s', 'server-pulse' ),
+						isset( $top['path'] ) ? $top['path'] : ''
+					),
+					__( 'One dynamic endpoint is requested far more than the rest and keeps PHP workers busy. This is usually load the site creates itself on every page view.', 'server-pulse' ),
+					__( 'Open Tools → Server Pulse → Traffic & logs to see the full list and the exact code to look for, then cache it or move the work out of the request.', 'server-pulse' ),
+					(int) $top['requests'],
+					array( 'detail' => $detail )
+				);
+			}
+
+			$total_5xx = $five;
+			if ( $total_5xx >= 100 ) {
+				$findings[] = $this->finding(
+					'traffic_5xx',
+					'performance',
+					$total_5xx >= 500 ? 'critical' : 'warning',
+					sprintf(
+						/* translators: %d: count. */
+						__( '%d server errors (5xx) in the analyzed window', 'server-pulse' ),
+						$total_5xx
+					),
+					__( 'Server errors are the visible tip of resource exhaustion on the host.', 'server-pulse' ),
+					__( 'Work through the recommended actions in the Traffic & logs tab and re-analyze.', 'server-pulse' ),
+					$total_5xx
+				);
+			}
+		}
+
+		if ( $errors && ! empty( $errors['groups'] ) ) {
+			$fatals = isset( $errors['by_severity']['fatal error'] ) ? (int) $errors['by_severity']['fatal error'] : 0;
+			if ( $fatals > 0 ) {
+				$findings[] = $this->finding(
+					'php_fatals',
+					'performance',
+					'critical',
+					sprintf(
+						/* translators: %d: count. */
+						__( '%d PHP fatal errors in the error log', 'server-pulse' ),
+						$fatals
+					),
+					__( 'Fatal errors kill the request and can take down the whole response.', 'server-pulse' ),
+					__( 'Open the Traffic & logs tab and fix the top offending file:line first.', 'server-pulse' ),
+					$fatals
+				);
+			}
+
+			$top = $errors['groups'][0];
+			if ( isset( $top['count'] ) && (int) $top['count'] >= 200 ) {
+				$findings[] = $this->finding(
+					'php_noise',
+					'performance',
+					'warning',
+					sprintf(
+						/* translators: 1: count, 2: location. */
+						__( 'A single PHP message repeats %1$d times (%2$s)', 'server-pulse' ),
+						(int) $top['count'],
+						( isset( $top['file'] ) ? $top['file'] : '' ) . ':' . ( isset( $top['line'] ) ? $top['line'] : '' )
+					),
+					__( 'Recurring warnings bloat the error log, slow down logging and hide the real problems.', 'server-pulse' ),
+					__( 'Fix the plugin/theme at that file:line (or suppress the notice).', 'server-pulse' ),
+					(int) $top['count']
+				);
+			}
 		}
 
 		return $findings;

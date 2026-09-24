@@ -8,6 +8,7 @@
 defined( 'ABSPATH' ) || exit;
 ?>
 <div class="wrap sp-wrap">
+	<?php Server_Pulse_Admin::render_tabs( 'diagnostics' ); ?>
 	<div class="sp-header">
 		<div class="sp-brand">
 			<span class="dashicons dashicons-search"></span>
